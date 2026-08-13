@@ -12,7 +12,7 @@ from .app_local import (
     list_instances,
     resolve_instance,
 )
-from .pipeline import apply_manifest, check_updates, upgrade_neoforge
+from .pipeline import CheckResult, apply_manifest, check_updates, error_layman, upgrade_neoforge
 
 
 def _count(label: str, n: int, *, hot: str | None = None) -> str:
@@ -27,6 +27,105 @@ def _count(label: str, n: int, *, hot: str | None = None) -> str:
         "red": term.red,
     }.get(hot)
     return paint(text) if paint else text
+
+
+def _error_line(row: dict) -> str:
+    return str(row.get("layman") or error_layman(row))
+
+
+def _error_detail(row: dict) -> str:
+    bits: list[str] = []
+    if row.get("err"):
+        bits.append(str(row["err"]))
+    if row.get("modid"):
+        bits.append(f"need {row['modid']}")
+    if row.get("range"):
+        bits.append(str(row["range"]))
+    if row.get("requested_by"):
+        bits.append(f"from {row['requested_by']}")
+    if row.get("actual") not in (None, ""):
+        bits.append(f"have {row['actual']}")
+    jar = row.get("jar")
+    if jar:
+        bits.append(str(jar))
+    return "  ".join(bits)
+
+
+def _fetched_tag(result: CheckResult, new_jar: str) -> str:
+    if new_jar in result.downloaded_files:
+        return "downloaded"
+    if new_jar in result.cached_files:
+        return "already staged"
+    return "listed"
+
+
+def print_check_summary(result: CheckResult, work) -> None:
+    """Counts plus the lists a person actually needs: every update, every error."""
+    parts = [
+        _count("updates", len(result.updates), hot="cyan"),
+        _count("downloaded", result.downloaded, hot="cyan"),
+        _count("cached", result.cached_jars),
+        _count("current", len(result.current), hot="green"),
+        _count("uncheckable", len(result.pack_only), hot="yellow"),
+        _count("no_source", len(result.no_source), hot="yellow"),
+        _count("errors", len(result.errors), hot="red"),
+    ]
+    print("  ".join(parts))
+    term.blank()
+
+    if result.updates:
+        print(term.cyan(f"Updates ({len(result.updates)})"))
+        print(
+            term.dim(
+                "Newer jars are in the work folder. They are not in the instance "
+                "until you run apply."
+            )
+        )
+        for u in sorted(
+            result.updates, key=lambda x: (x.display_name or x.jar_name).lower()
+        ):
+            name = u.display_name or u.modid or u.jar_name
+            how = _fetched_tag(result, u.new_jar)
+            old_v = u.old_version or "?"
+            new_v = u.new_version or "?"
+            print(f"  {name}  {old_v} → {new_v}  [{how}]")
+            print(term.dim(f"    {u.jar_name} → {u.new_jar}"))
+        term.blank()
+
+    if result.pack_only:
+        print(term.yellow(f"Uncheckable ({len(result.pack_only)})"))
+        print(
+            term.yellow(
+                "Latest was not checked on Modrinth/CurseForge. "
+                "That is not the same as up to date."
+            )
+        )
+        for row in result.pack_only:
+            why = row.get("layman") or row.get("reason") or ""
+            print(term.dim(f"  {row.get('jar')}: {why}"))
+        term.blank()
+
+    if result.errors:
+        print(term.red(f"Errors ({len(result.errors)})"))
+        print(
+            term.red(
+                "These are problems the check found. "
+                "They are not a count of failed downloads."
+            )
+        )
+        for row in result.errors:
+            print(term.red(f"  {_error_line(row)}"))
+            detail = _error_detail(row)
+            if detail:
+                print(term.dim(f"    {detail}"))
+        term.blank()
+
+    if result.min_neoforge_floor:
+        print(f"Min NeoForge floor: {term.yellow(str(result.min_neoforge_floor))}")
+
+    print(term.dim(f"Work root: {work}"))
+    print(term.dim(f"Manifest:  {work / 'manifest.json'}"))
+    print(term.dim(f"Report:    {work / 'report-latest.md'}"))
 
 
 def _peek_color(argv: list[str] | None) -> str:
@@ -144,41 +243,14 @@ def cmd_check(args: argparse.Namespace) -> int:
         cf_api_key=getattr(args, "cf_api_key", None),
     )
     term.blank()
-    parts = [
-        _count("updates", len(result.updates), hot="cyan"),
-        _count("downloaded", result.downloaded, hot="cyan"),
-        _count("cached", result.cached_jars),
-        _count("current", len(result.current), hot="green"),
-        _count("uncheckable", len(result.pack_only), hot="yellow"),
-        _count("no_source", len(result.no_source), hot="yellow"),
-        _count("errors", len(result.errors), hot="red"),
-    ]
-    print("  ".join(parts))
-    if result.pack_only:
-        print(
-            term.yellow(
-                "uncheckable = latest not checked on Modrinth/CurseForge "
-                "(reason codes below; not \"up to date\")"
-            )
-        )
-        for row in result.pack_only[:12]:
-            why = row.get("layman") or row.get("reason") or ""
-            print(term.dim(f"  - {row.get('jar')}: {why}"))
-        if len(result.pack_only) > 12:
-            print(term.dim(f"  - ... and {len(result.pack_only) - 12} more"))
-    if result.min_neoforge_floor:
-        print(f"Min NeoForge floor: {term.yellow(str(result.min_neoforge_floor))}")
-        cur = inst.neoforge_version
-        if cur:
-            from .versions import neoforge_gte
+    print_check_summary(result, work)
+    if result.min_neoforge_floor and inst.neoforge_version:
+        from .versions import neoforge_gte
 
-            ok = neoforge_gte(cur, result.min_neoforge_floor)
-            flag = term.ok("yes") if ok else term.warn("no")
-            print(f"Current NeoForge {cur} satisfies floor: {flag}")
-    term.blank()
-    print(term.dim(f"Work root: {work}"))
-    print(term.dim(f"Manifest:  {work / 'manifest.json'}"))
-    print(term.dim(f"Report:    {work / 'report-latest.md'}"))
+        cur = inst.neoforge_version
+        ok = neoforge_gte(cur, result.min_neoforge_floor)
+        flag = term.ok("yes") if ok else term.warn("no")
+        print(f"Current NeoForge {cur} satisfies floor: {flag}")
     return 0 if not result.errors else 1
 
 
@@ -242,6 +314,8 @@ def cmd_all(args: argparse.Namespace) -> int:
         download=True,
         cf_api_key=getattr(args, "cf_api_key", None),
     )
+    term.blank()
+    print_check_summary(result, work)
     term.blank()
     if result.updates and not args.dry_run:
         print(term.section("=== apply ==="))

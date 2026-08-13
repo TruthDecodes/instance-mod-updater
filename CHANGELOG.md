@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.1 - 2026-08-13
+
+Console is meant to be read by a person, not only a report file.
+
+- Every jar transfer prints a result line, including files under 256 KB (those used to be silent)
+- After check, list every update and every error. Errors are red and include a plain-language why
+- `errors` is not a failed-download count. A required companion is only an error if it is not a separate jar and not bundled inside the parent
+- Loader/platform ids (`neoforge`, `minecraft`, …) are not treated as missing jars
+- Extra `[[mods]]` ids, inline `mods = [{ ... }]`, and NeoForge JarJar (`META-INF/jarjar`) count as present. `${file.jarVersion}` is read from the jar manifest
+- The checker does not add mods that are not already in the instance
+
 ## 0.1.0 - 2026-08-13
 
 First public snapshot. Unfinished. Not a release.

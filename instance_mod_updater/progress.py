@@ -46,6 +46,15 @@ class LineProgress:
         sys.stderr.flush()
         self._active = True
 
+    def park(self) -> None:
+        """Erase the live status line so a durable message can follow it."""
+        if not self._active:
+            return
+        sys.stderr.write("\r")
+        _clear_line()
+        sys.stderr.flush()
+        self._active = False
+
     def end(self, final: str | None = None) -> None:
         if final is not None:
             sys.stderr.write("\r" + style_log_line(final))
@@ -119,6 +128,22 @@ class ProgressBar:
         _clear_line()
         sys.stderr.write("\n")
         sys.stderr.flush()
+
+
+def announce_transfer(
+    label: str,
+    size: int | float | None,
+    *,
+    ok: bool = True,
+    cached: bool = False,
+) -> None:
+    """One committed stderr line for every jar transfer (including tiny files)."""
+    status = term.ok("OK") if ok else term.fail("FAIL")
+    kind = "cached" if cached else "DL"
+    prefix = term.dim(f"{kind} {label}")
+    line = f"  {prefix}: {format_bytes(size)}  [{status}]"
+    sys.stderr.write(line + "\n")
+    sys.stderr.flush()
 
 
 LogFn = Callable[[str], None]

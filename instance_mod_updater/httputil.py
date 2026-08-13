@@ -9,9 +9,9 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, TypeVar
 
-from .progress import ProgressBar
+from .progress import ProgressBar, announce_transfer
 
-DEFAULT_UA = "instance-mod-updater/0.1.0 (+https://github.com/TruthDecodes/instance-mod-updater)"
+DEFAULT_UA = "instance-mod-updater/0.1.1 (+https://github.com/TruthDecodes/instance-mod-updater)"
 
 # Only show a progress bar for transfers at least this large
 PROGRESS_MIN_BYTES = 256 * 1024
@@ -190,7 +190,7 @@ def download(
     label: str | None = None,
     show_progress: bool = True,
 ) -> int:
-    """Download URL to dest_path. Progress only for larger files."""
+    """Download URL to dest_path. Live bar for large files; every jar gets a result line."""
     req = urllib.request.Request(url, headers={"User-Agent": ua})
     os.makedirs(os.path.dirname(dest_path) or ".", exist_ok=True)
     name = label or os.path.basename(dest_path) or "download"
@@ -212,9 +212,13 @@ def download(
                     bar.update(len(chunk))
         if bar:
             bar.finish(True)
+        elif show_progress:
+            announce_transfer(name, size, ok=True)
     except Exception:
         if bar:
             bar.finish(False)
+        elif show_progress:
+            announce_transfer(name, size, ok=False)
         raise
     return size
 

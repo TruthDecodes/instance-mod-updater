@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import re
 import zipfile
 from dataclasses import dataclass, field
@@ -19,7 +20,25 @@ class InstalledMod:
     loader_version_range: str | None = None  # from neoforge.mods.toml
     # Required inter-mod deps: [{"modid": "...", "versionRange": "[1.4.98,)"}]
     dependencies: list[dict[str, str]] = field(default_factory=list)
+    # Other [[mods]] ids in this same jar (APIs / bundled companions)
+    provides: list[str] = field(default_factory=list)
+    # modid -> version for every [[mods]] entry in the jar
+    mod_versions: dict[str, str] = field(default_factory=dict)
     extra: dict[str, Any] = field(default_factory=dict)
+
+
+# Not jars. Dep checker must never treat these as missing companions.
+PLATFORM_MODIDS = frozenset(
+    {
+        "minecraft",
+        "java",
+        "neoforge",
+        "forge",
+        "fabricloader",
+        "fabric",
+        "quilt_loader",
+    }
+)
 
 
 def sha1_file(
@@ -42,19 +61,103 @@ def sha1_file(
                 progress(done, total)
     return h.hexdigest()
 
+_TOML_STR = r"""["']([^"']*)["']"""
+
+
+def _toml_kv(blob: str, key: str) -> str | None:
+    hit = re.search(rf"(?:^|[,\s]){re.escape(key)}\s*=\s*{_TOML_STR}", blob, re.I | re.M)
+    return hit.group(1) if hit else None
+
+
+def _row_from_mod_blob(blob: str) -> dict[str, str]:
+    row: dict[str, str] = {}
+    mid = _toml_kv(blob, "modId") or _toml_kv(blob, "modid")
+    if mid:
+        row["modid"] = mid
+    name = _toml_kv(blob, "displayName")
+    if name:
+        row["displayname"] = name
+    ver = _toml_kv(blob, "version")
+    if ver:
+        row["version"] = ver
+    return row
+
+
+def _parse_mod_entries(text: str) -> list[dict[str, str]]:
+    """Every [[mods]] block or inline mods = [{ ... }]. One jar can ship several ids."""
+    entries: list[dict[str, str]] = []
+    for m in re.finditer(
+        r"\[\[mods\]\](.*?)(?=\n\[\[mods\]\]|\n\[\[dependencies|\n\[mods\.|\Z)",
+        text,
+        re.S | re.I,
+    ):
+        row = _row_from_mod_blob(m.group(1))
+        if row.get("modid"):
+            entries.append(row)
+    if entries:
+        return entries
+    # Low-code / some structure mods: mods = [{ modId = 'mes', version = '2.0.3', ... }]
+    arr = _extract_bracket_array(text, "mods")
+    if not arr:
+        return entries
+    for obj in re.finditer(r"\{(.*?)\}", arr, re.S):
+        row = _row_from_mod_blob(obj.group(1))
+        if row.get("modid"):
+            entries.append(row)
+    return entries
+
+
+def _extract_bracket_array(text: str, key: str) -> str | None:
+    """Body of `key = [ ... ]`, quote-aware so a later [1.1.0,) does not steal the close."""
+    m = re.search(rf"^\s*{re.escape(key)}\s*=\s*\[", text, re.M)
+    if not m:
+        return None
+    i = m.end()
+    depth = 1
+    in_str: str | None = None
+    while i < len(text) and depth:
+        ch = text[i]
+        if in_str:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == in_str:
+                in_str = None
+        elif ch in ("'", '"'):
+            in_str = ch
+        elif ch == "[":
+            depth += 1
+        elif ch == "]":
+            depth -= 1
+        i += 1
+    if depth != 0:
+        return None
+    return text[m.end() : i - 1]
+
+
 def _parse_toml_simple(text: str) -> dict[str, Any]:
     """Minimal TOML-ish extract for mods.toml / neoforge.mods.toml (no full parser)."""
     out: dict[str, Any] = {}
-    # [[mods]] block first entry
-    mod_block = re.search(r"\[\[mods\]\](.*?)(?=\n\[\[|\n\[mods\.|\Z)", text, re.S | re.I)
-    blob = mod_block.group(1) if mod_block else text
-    for key in ("modId", "modid", "displayName", "version"):
-        m = re.search(rf'^\s*{key}\s*=\s*"([^"]*)"', blob, re.M | re.I)
-        if m:
-            out[key.lower() if key != "displayName" else "displayname"] = m.group(1)
+    entries = _parse_mod_entries(text)
+    if entries:
+        primary = entries[0]
+        out["modid"] = primary.get("modid")
+        if primary.get("displayname"):
+            out["displayname"] = primary["displayname"]
+        if primary.get("version"):
+            out["version"] = primary["version"]
+        out["mod_versions"] = {
+            e["modid"].lower(): e.get("version") or "" for e in entries if e.get("modid")
+        }
+        out["provides"] = [e["modid"] for e in entries[1:] if e.get("modid")]
+    else:
+        # Do not scan the whole file for a loose modId. The first hit is often a
+        # [[dependencies.*]] target (MoogsEndStructures → moogs_structures).
+        out["provides"] = []
+        out["mod_versions"] = {}
     # Top-level loaderVersion is FML API (e.g. "[63,)") — NOT NeoForge 26.x.x.x.
     # Keep only as fmlLoaderVersion; NeoForge floor comes from dependency on neoforge.
-    m = re.search(r'^\s*loaderVersion\s*=\s*"([^"]*)"', text, re.M)
+    m = re.search(rf"^\s*loaderVersion\s*=\s*{_TOML_STR}", text, re.M)
     if m:
         out["fmlLoaderVersion"] = m.group(1)
     neo_range = None
@@ -66,8 +169,8 @@ def _parse_toml_simple(text: str) -> dict[str, Any]:
         re.S | re.I,
     ):
         block = m.group(1)
-        mid = re.search(r'^\s*modId\s*=\s*"([^"]*)"', block, re.M | re.I)
-        ver = re.search(r'^\s*versionRange\s*=\s*"([^"]*)"', block, re.M | re.I)
+        mid = re.search(rf"^\s*modId\s*=\s*{_TOML_STR}", block, re.M | re.I)
+        ver = re.search(rf"^\s*versionRange\s*=\s*{_TOML_STR}", block, re.M | re.I)
         if not mid or not ver:
             continue
         mid_l = mid.group(1).lower()
@@ -77,9 +180,9 @@ def _parse_toml_simple(text: str) -> dict[str, Any]:
         if mid_l == "forge" and forge_range is None:
             forge_range = ver.group(1)
             continue
-        if mid_l in ("minecraft", "java"):
+        if mid_l in PLATFORM_MODIDS:
             continue
-        typ = re.search(r'^\s*type\s*=\s*"([^"]*)"', block, re.M | re.I)
+        typ = re.search(rf"^\s*type\s*=\s*{_TOML_STR}", block, re.M | re.I)
         mandatory = re.search(r"^\s*mandatory\s*=\s*(true|false)", block, re.M | re.I)
         is_req = True
         if typ:
@@ -97,38 +200,139 @@ def _parse_toml_simple(text: str) -> dict[str, Any]:
     return out
 
 
+def _manifest_impl_version(zf: zipfile.ZipFile) -> str:
+    names = {n.replace("\\", "/") for n in zf.namelist()}
+    if "META-INF/MANIFEST.MF" not in names:
+        return ""
+    try:
+        raw = zf.read("META-INF/MANIFEST.MF").decode("utf-8", errors="replace")
+    except Exception:
+        return ""
+    for line in raw.splitlines():
+        if line.lower().startswith("implementation-version:"):
+            return line.split(":", 1)[1].strip()
+    return ""
+
+
+def _apply_jar_version(ver: str | None, impl: str) -> str:
+    v = (ver or "").strip()
+    if not v or v.startswith("${"):
+        return impl or ""
+    return v
+
+
+def _parse_fabric_mod_json(raw: str) -> dict[str, Any]:
+    import json
+
+    data = json.loads(raw)
+    mid = data.get("id")
+    out: dict[str, Any] = {
+        "modid": mid,
+        "displayname": data.get("name"),
+        "version": data.get("version"),
+        "provides": [],
+        "mod_versions": {},
+        "dependencies": [],
+    }
+    if mid:
+        out["mod_versions"] = {str(mid).lower(): str(data.get("version") or "")}
+    return out
+
+
+def _metadata_from_open_zip(zf: zipfile.ZipFile, *, scan_jarjar: bool = True) -> dict[str, Any]:
+    names = [n.replace("\\", "/") for n in zf.namelist()]
+    name_set = set(names)
+    parsed: dict[str, Any] = {}
+    for candidate in ("META-INF/neoforge.mods.toml", "META-INF/mods.toml"):
+        if candidate not in name_set:
+            continue
+        raw = zf.read(candidate).decode("utf-8", errors="replace")
+        parsed = _parse_toml_simple(raw)
+        if parsed.get("modid"):
+            break
+    if not parsed.get("modid") and "fabric.mod.json" in name_set:
+        fabric = _parse_fabric_mod_json(
+            zf.read("fabric.mod.json").decode("utf-8", errors="replace")
+        )
+        if not parsed:
+            parsed = fabric
+        else:
+            parsed["modid"] = fabric.get("modid")
+            if fabric.get("displayname") and not parsed.get("displayname"):
+                parsed["displayname"] = fabric["displayname"]
+            if fabric.get("version") and not parsed.get("version"):
+                parsed["version"] = fabric["version"]
+            versions = dict(parsed.get("mod_versions") or {})
+            versions.update(fabric.get("mod_versions") or {})
+            parsed["mod_versions"] = versions
+    impl = _manifest_impl_version(zf)
+    if impl:
+        parsed["version"] = _apply_jar_version(parsed.get("version"), impl)
+        versions = dict(parsed.get("mod_versions") or {})
+        mid = parsed.get("modid")
+        if mid:
+            versions[str(mid).lower()] = _apply_jar_version(
+                versions.get(str(mid).lower()), impl
+            )
+        for k, v in list(versions.items()):
+            versions[k] = _apply_jar_version(v, impl)
+        parsed["mod_versions"] = versions
+    provides = [str(x) for x in (parsed.get("provides") or []) if x]
+    versions = dict(parsed.get("mod_versions") or {})
+    if scan_jarjar:
+        extra_p, extra_v = _scan_jarjar_provides(zf)
+        for mid in extra_p:
+            if mid and mid.lower() != str(parsed.get("modid") or "").lower():
+                if mid not in provides:
+                    provides.append(mid)
+        for k, v in extra_v.items():
+            versions.setdefault(k, v)
+    parsed["provides"] = provides
+    parsed["mod_versions"] = versions
+    return {
+        "modid": parsed.get("modid"),
+        "displayname": parsed.get("displayname"),
+        "version": parsed.get("version"),
+        "loaderVersion": parsed.get("loaderVersion"),
+        "dependencies": parsed.get("dependencies") or [],
+        "provides": provides,
+        "mod_versions": versions,
+    }
+
+
+def _scan_jarjar_provides(zf: zipfile.ZipFile) -> tuple[list[str], dict[str, str]]:
+    """Mod ids shipped inside META-INF/jarjar (NeoForge JarJar). The game loads these."""
+    provides: list[str] = []
+    versions: dict[str, str] = {}
+    for name in zf.namelist():
+        low = name.replace("\\", "/").lower()
+        if not low.startswith("meta-inf/jarjar/") or not low.endswith(".jar"):
+            continue
+        try:
+            inner = zipfile.ZipFile(io.BytesIO(zf.read(name)))
+        except Exception:
+            continue
+        with inner:
+            nested = _metadata_from_open_zip(inner, scan_jarjar=False)
+        mid = nested.get("modid")
+        if mid:
+            provides.append(str(mid))
+            ver = str(nested.get("version") or "")
+            versions[str(mid).lower()] = ver
+        for extra in nested.get("provides") or []:
+            if extra and extra not in provides:
+                provides.append(str(extra))
+        for k, v in (nested.get("mod_versions") or {}).items():
+            versions.setdefault(str(k).lower(), str(v or ""))
+    return provides, versions
+
+
 def read_mod_metadata(jar_path: Path) -> dict[str, Any]:
     try:
         with zipfile.ZipFile(jar_path, "r") as zf:
-            names = zf.namelist()
-            for candidate in (
-                "META-INF/neoforge.mods.toml",
-                "META-INF/mods.toml",
-                "fabric.mod.json",
-            ):
-                if candidate not in names:
-                    continue
-                raw = zf.read(candidate).decode("utf-8", errors="replace")
-                if candidate.endswith(".json"):
-                    import json
-
-                    data = json.loads(raw)
-                    return {
-                        "modid": data.get("id"),
-                        "displayname": data.get("name"),
-                        "version": data.get("version"),
-                    }
-                parsed = _parse_toml_simple(raw)
-                return {
-                    "modid": parsed.get("modid"),
-                    "displayname": parsed.get("displayname"),
-                    "version": parsed.get("version"),
-                    "loaderVersion": parsed.get("loaderVersion"),
-                    "dependencies": parsed.get("dependencies") or [],
-                }
+            return _metadata_from_open_zip(zf, scan_jarjar=True)
     except Exception:
         return {}
-    return {}
 
 
 def scan_mods_dir(
@@ -159,6 +363,8 @@ def scan_mods_dir(
                 version=meta.get("version"),
                 loader_version_range=meta.get("loaderVersion"),
                 dependencies=list(meta.get("dependencies") or []),
+                provides=list(meta.get("provides") or []),
+                mod_versions=dict(meta.get("mod_versions") or {}),
             )
         )
     return out

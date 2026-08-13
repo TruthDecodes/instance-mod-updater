@@ -12,12 +12,13 @@ from typing import Any, Callable
 from . import curseforge, httputil, modrinth, neoforge, pack_manifest
 from .app_local import Instance, bin_dir, default_ftba_root, default_work_root
 from .inventory import (
+    PLATFORM_MODIDS,
     InstalledMod,
     min_neoforge_from_ranges,
     read_mod_metadata,
     scan_mods_dir,
 )
-from .progress import LineProgress, format_bytes, log_line
+from .progress import LineProgress, announce_transfer, format_bytes, log_line
 
 
 LogFn = Callable[[str], None]
@@ -61,6 +62,8 @@ class CheckResult:
     # How many update jars were transferred this run vs already under work/jars
     downloaded: int = 0
     cached_jars: int = 0
+    downloaded_files: list[str] = field(default_factory=list)
+    cached_files: list[str] = field(default_factory=list)
 
 
 def _layman_for_codes(codes: list[str], *, pack_matched: bool) -> str:
@@ -148,14 +151,32 @@ def _uncheckable_row(
     return row
 
 
+def _provided_ids(
+    *,
+    modid: str | None,
+    provides: list[str] | None,
+    mod_versions: dict[str, str] | None,
+) -> set[str]:
+    out: set[str] = set()
+    if modid:
+        out.add(modid.lower())
+    for p in provides or []:
+        if p:
+            out.add(str(p).lower())
+    for k in mod_versions or {}:
+        if k:
+            out.add(str(k).lower())
+    return out
+
+
 def _planned_dep_sources(
     mods: list[InstalledMod],
     updates: list[Replacement],
     jars_dir: Path,
-) -> list[tuple[str, str | None, list[dict[str, str]]]]:
-    """(requester_label, requester_modid, required deps) for jars after apply."""
+) -> list[tuple[str, str | None, list[dict[str, str]], set[str]]]:
+    """(label, requester_modid, required deps, ids this jar already provides)."""
     by_old = {u.jar_name: u for u in updates}
-    out: list[tuple[str, str | None, list[dict[str, str]]]] = []
+    out: list[tuple[str, str | None, list[dict[str, str]], set[str]]] = []
     for mod in mods:
         upd = by_old.get(mod.jar_name)
         if upd:
@@ -165,11 +186,21 @@ def _planned_dep_sources(
             meta = read_mod_metadata(staged)
             deps = list(meta.get("dependencies") or [])
             label = upd.display_name or upd.modid or upd.new_jar
-            out.append((label, upd.modid or mod.modid, deps))
+            provided = _provided_ids(
+                modid=meta.get("modid") or upd.modid or mod.modid,
+                provides=list(meta.get("provides") or []),
+                mod_versions=dict(meta.get("mod_versions") or {}),
+            )
+            out.append((label, upd.modid or mod.modid, deps, provided))
             continue
         if mod.dependencies:
             label = mod.display_name or mod.modid or mod.jar_name
-            out.append((label, mod.modid, list(mod.dependencies)))
+            provided = _provided_ids(
+                modid=mod.modid,
+                provides=mod.provides,
+                mod_versions=mod.mod_versions,
+            )
+            out.append((label, mod.modid, list(mod.dependencies), provided))
     return out
 
 
@@ -177,19 +208,90 @@ def _effective_companion_version(
     companion: InstalledMod,
     upd: Replacement | None,
     jars_dir: Path,
+    need_id: str = "",
 ) -> str:
+    need = (need_id or companion.modid or "").lower()
     if upd:
         staged = jars_dir / upd.new_jar
         if staged.is_file():
             meta = read_mod_metadata(staged)
-            ver = meta.get("version")
+            versions = meta.get("mod_versions") or {}
+            ver = versions.get(need) or meta.get("version")
             if ver and not str(ver).startswith("${"):
                 return str(ver)
         if upd.new_version:
             return upd.new_version
+    if need and companion.mod_versions.get(need):
+        ver = companion.mod_versions[need]
+        if ver and not ver.startswith("${"):
+            return ver
     if companion.version and not companion.version.startswith("${"):
         return companion.version
     return ""
+
+
+def _index_by_modid(mods: list[InstalledMod]) -> dict[str, InstalledMod]:
+    """Primary modid wins; extra [[mods]] ids in the same jar fill gaps."""
+    by: dict[str, InstalledMod] = {}
+    for m in mods:
+        if m.modid:
+            by[m.modid.lower()] = m
+    for m in mods:
+        for mid in m.mod_versions:
+            by.setdefault(mid.lower(), m)
+        for mid in m.provides:
+            by.setdefault(mid.lower(), m)
+    return by
+
+
+def error_layman(row: dict[str, Any]) -> str:
+    """Plain-language explanation for one check error (console + report)."""
+    err = str(row.get("err") or "unknown")
+    jar = str(row.get("jar") or "A mod")
+    need = str(row.get("modid") or "a required companion")
+    rng = str(row.get("range") or "").strip()
+    rng_s = f" ({rng})" if rng else ""
+    actual = row.get("actual")
+    if err == "missing_mandatory_dep":
+        return (
+            f"{jar} lists {need}{rng_s} as required. That companion is not a "
+            f"separate jar in this instance and is not bundled inside {jar}. "
+            f"This tool does not download new mods. If the game already runs, "
+            f"the checker missed a bundled library. If the game will not "
+            f"start, install {need} and run check again."
+        )
+    if err == "mandatory_dep_unsatisfied":
+        if actual:
+            have = f" The installed version is {actual}."
+        else:
+            have = " Its version on disk could not be read."
+        return (
+            f"{jar} requires {need}{rng_s}.{have} "
+            f"No matching update was found on Modrinth or CurseForge."
+        )
+    if err == "tiny_download":
+        return (
+            f"The file downloaded for {jar} was too small to be a real jar. "
+            f"The transfer may have failed."
+        )
+    if err == "no_file":
+        return (
+            f"Found an update listing for {jar}, but it had no downloadable jar."
+        )
+    if err == "cf_no_key":
+        return (
+            f"A CurseForge API key is required to download the update for {jar}."
+        )
+    if err == "cf_no_download_url":
+        return f"CurseForge did not give a download link for {jar}."
+    extra = str(err)
+    return f"{jar}: {extra}"
+
+
+def _attach_error_layman(result: CheckResult) -> None:
+    for row in result.errors:
+        if not row.get("layman"):
+            row["layman"] = error_layman(row)
 
 
 def _satisfy_mandatory_deps(
@@ -213,7 +315,7 @@ def _satisfy_mandatory_deps(
     """If a planned jar requires a newer installed companion, stage that companion."""
     from .versions import version_in_maven_range
 
-    by_modid = {(m.modid or "").lower(): m for m in mods if m.modid}
+    by_modid = _index_by_modid(mods)
     failed: set[tuple[str, str]] = set()
     queued = 0
 
@@ -231,13 +333,18 @@ def _satisfy_mandatory_deps(
     for _ in range(8):
         changed = False
         by_id = updates_by_modid()
-        for requester, req_modid, deps in _planned_dep_sources(
+        for requester, req_modid, deps, provided in _planned_dep_sources(
             mods, result.updates, jars_dir
         ):
             for dep in deps:
                 need_id = (dep.get("modid") or "").lower()
                 rng = dep.get("versionRange") or ""
                 if not need_id or not rng:
+                    continue
+                if need_id in PLATFORM_MODIDS:
+                    continue
+                # Same jar already ships this id (extra [[mods]] or JarJar).
+                if need_id in provided:
                     continue
                 companion = by_modid.get(need_id)
                 if companion is None:
@@ -256,7 +363,7 @@ def _satisfy_mandatory_deps(
                     )
                     continue
                 upd = by_id.get(need_id)
-                eff = _effective_companion_version(companion, upd, jars_dir)
+                eff = _effective_companion_version(companion, upd, jars_dir, need_id)
                 if version_in_maven_range(eff, rng) is True:
                     continue
                 if version_in_maven_range(eff, rng) is None and eff:
@@ -772,8 +879,11 @@ def check_updates(
         alt_url: str | None = None,
     ) -> bool:
         """Download if missing; count dl vs cached. False if result unusable."""
+        check_line.park()
         if dest.exists() and dest.stat().st_size > 0:
             result.cached_jars += 1
+            result.cached_files.append(dest.name)
+            announce_transfer(label, dest.stat().st_size, cached=True)
             return True
         try:
             httputil.download(url, str(dest), ua=ua, label=label)
@@ -785,6 +895,7 @@ def check_updates(
             dest.unlink(missing_ok=True)
             return False
         result.downloaded += 1
+        result.downloaded_files.append(dest.name)
         return True
 
     for idx, mod in enumerate(mods, start=1):
@@ -1234,6 +1345,7 @@ def check_updates(
             if proj.get("slug"):
                 rep.project = proj["slug"]
 
+    _attach_error_layman(result)
     check_line.end(
         f"  Check done in {time.monotonic() - t_check:.1f}s  "
         f"updates={len(result.updates)} downloaded={result.downloaded} "
@@ -1287,7 +1399,9 @@ def check_updates(
         "checked": result.checked,
         "updates": [asdict(u) for u in result.updates],
         "downloaded": result.downloaded,
+        "downloaded_files": result.downloaded_files,
         "cached_jars": result.cached_jars,
+        "cached_files": result.cached_files,
         "current": result.current,
         "pack_only": result.pack_only,
         "no_source": result.no_source,
@@ -1398,6 +1512,32 @@ def check_updates(
         )
     if len(result.no_source) > 50:
         lines.append(f"- ... and {len(result.no_source) - 50} more")
+    lines += [
+        "",
+        "## Errors",
+        "",
+        "Problems found during check. This is not a count of failed downloads. "
+        "This tool does not add mods that are not already in the instance.",
+        "",
+    ]
+    if not result.errors:
+        lines.append("- (none)")
+    else:
+        for e in result.errors:
+            note = e.get("layman") or error_layman(e)
+            jar = e.get("jar") or "?"
+            err = e.get("err") or "?"
+            bits = [f"`{err}`"]
+            if e.get("modid"):
+                bits.append(f"need `{e['modid']}`")
+            if e.get("range"):
+                bits.append(f"`{e['range']}`")
+            if e.get("requested_by"):
+                bits.append(f"from `{e['requested_by']}`")
+            if e.get("actual") not in (None, ""):
+                bits.append(f"have `{e['actual']}`")
+            lines.append(f"- {note}")
+            lines.append(f"  `{jar}` ({', '.join(bits)})")
     report_md.write_text("\n".join(lines) + "\n", encoding="utf-8")
     (work / "report-latest.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 

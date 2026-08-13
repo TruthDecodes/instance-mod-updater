@@ -1,6 +1,6 @@
 # Mod updater for FTB App instances
 
-**Unfinished.** Version 0.1.0. Personal snapshot, not a release. No support.
+**Unfinished.** Version 0.1.1. Personal snapshot, not a release. No support.
 Do not treat it as ready for anyone else. Not an official Feed the Beast product.
 
 Update **mods on an existing FTB App instance** (your real modlist stays where it is).
@@ -130,7 +130,7 @@ https://api.feed-the-beast.com/v1/modpacks/public/modpack/{packId}/{versionId}
 - Prefer **release** builds for this Minecraft version + loader.
 - If only **beta** (or only alpha) exists for that game/loader, treat that as the author’s normal channel.
 - Never replace with a version that is not strictly newer when comparable.
-- After per-jar picks, read **mandatory** inter-mod `versionRange` on staged jars (and installed jars that are not being replaced). If an already-installed companion is out of range, pull a newer eligible build for that companion. Does not add mods that are not already in the instance.
+- After per-jar picks, read **mandatory** inter-mod `versionRange` on staged jars (and installed jars that are not being replaced). If an already-installed companion is out of range, pull a newer eligible build for that companion. **Does not add mods that are not already in the instance.** A required companion with no jar of its own is an **error** (red, with a why), not a download.
 - On NeoForge instances, reject CF jars whose filenames are pure `-forge-` (not NeoForge).
 - Skip CurseForge files marked early-access. Skip download when the official mod record disallows third-party distribution.
 - NeoForge upgrade uses the latest **matching MC line** (e.g. `26.1.2.x` for MC `26.1.2`, not `26.2.x`) when mod dependency floors require it.
@@ -139,6 +139,7 @@ https://api.feed-the-beast.com/v1/modpacks/public/modpack/{packId}/{versionId}
   - **`current`**: we looked up Modrinth and/or CurseForge and you already have the newest eligible build for this MC+loader. Safe to read as “up to date on a public listing.” CurseForge lookup only runs when a Core API key is set.
   - **`uncheckable` / `pack_only`**: latest was **not** checked. Structured reason codes + short why (CLI + report). Matching the pack pin is **never** “up to date.”
   - **`no_source`**: no Modrinth hash, no pack row, and cascade still failed (same style of reasons).
+  - **`errors`**: problems found after the scan. Not a count of failed downloads. Typical: a required companion is not a separate jar and is not bundled in the parent (JarJar / extra `[[mods]]`); or a companion is present but no matching update was found. The console lists every error in red. Libraries the game already loads from inside a parent jar are not errors.
 - **Resolve cascade** (when jar SHA1 is not on Modrinth **and** the pack row has no CurseForge project id):
   1. Exact Modrinth `GET /project/{id-or-slug}` using installed **modid** and jar **product stem** only. **No** free-text Modrinth search.
   2. CurseForge **fingerprint** (`hashes.cfMurmur` or local jar murmur) only if `CURSEFORGE_API_KEY` / `CF_API_KEY` / `--cf-api-key` is set. Official `POST /v1/fingerprints/{gameId}` only. **No** CurseForge search. Without a key, those jars report `fingerprint_no_key` (and CF file lists are not fetched). That is not a failure of the check command.
