@@ -1,0 +1,43 @@
+# Bundled embeddable CPython (download via scripts/fetch-runtime.ps1)
+/runtime/
+
+# Last zip self-update commit (not used when this folder is a git clone)
+.self-update-sha
+
+# Machine-local extras (not shipped; self-update leaves this dir alone)
+/local/
+
+# Staging / work product (local runs)
+/jars/
+/backup*/
+/neoforge-install/
+*.log
+report-*.json
+report-*.md
+report-latest.*
+manifest.json
+pack-*.json
+neoforge-*-installer.jar
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# Secrets (never commit)
+.env
+.env.*
+*.pem
+*.key
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+.serena/

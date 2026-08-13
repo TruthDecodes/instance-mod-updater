@@ -1,0 +1,19 @@
+{
+  "data": {
+    "id": 99,
+    "fileName": "x.jar",
+    "displayName": "x",
+    "fileDate": "2024-01-01T00:00:00Z",
+    "downloadUrl": "https://example.invalid/from-file.jar",
+    "isEarlyAccessContent": false,
+    "isAvailable": true,
+    "releaseType": 1,
+    "gameVersions": ["1.20.1", "NeoForge"],
+    "hashes": [
+      {
+        "algo": 1,
+        "value": "cccccccccccccccccccccccccccccccccccccccc"
+      }
+    ]
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "data": {
+    "id": 1,
+    "gameId": 432,
+    "name": "Example Mod",
+    "slug": "example-mod",
+    "allowModDistribution": true
+  }
+}

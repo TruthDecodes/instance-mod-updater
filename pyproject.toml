@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "instance-mod-updater"
+version = "0.1.0"
+description = "Experimental: update mods on an existing FTB App instance (unfinished, not official Feed the Beast, not a release)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Truth" }]
+keywords = ["minecraft", "neoforge", "modrinth", "curseforge", "ftb-app"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: End Users/Desktop",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: Microsoft :: Windows",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Games/Entertainment",
+]
+# stdlib only — no runtime dependencies
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/TruthDecodes/instance-mod-updater"
+Repository = "https://github.com/TruthDecodes/instance-mod-updater"
+
+[project.scripts]
+instance-mod-updater = "instance_mod_updater.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["instance_mod_updater*"]
