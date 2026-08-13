@@ -59,8 +59,25 @@ def _fetched_tag(result: CheckResult, new_jar: str) -> str:
     return "listed"
 
 
-def print_check_summary(result: CheckResult, work) -> None:
+def _neoforge_floor_line(floor: str, current: str | None) -> str:
+    """Instance loader vs required floor. Belongs with the check headline, not the file footer."""
+    if current:
+        from .versions import neoforge_gte
+
+        if neoforge_gte(current, floor):
+            return (
+                f"NeoForge {term.yellow(current)} meets floor {term.yellow(floor)}"
+            )
+        return term.warn(f"NeoForge {current} is below floor {floor}")
+    return f"NeoForge floor: {term.yellow(floor)}"
+
+
+def print_check_summary(
+    result: CheckResult, work, *, current_neoforge: str | None = None
+) -> None:
     """Counts plus the lists a person actually needs: every update, every error."""
+    if result.min_neoforge_floor:
+        print(_neoforge_floor_line(result.min_neoforge_floor, current_neoforge))
     parts = [
         _count("updates", len(result.updates), hot="cyan"),
         _count("downloaded", result.downloaded, hot="cyan"),
@@ -74,6 +91,8 @@ def print_check_summary(result: CheckResult, work) -> None:
     term.blank()
 
     if result.updates:
+        from .versions import display_version
+
         print(term.cyan(f"Updates ({len(result.updates)})"))
         print(
             term.dim(
@@ -86,8 +105,8 @@ def print_check_summary(result: CheckResult, work) -> None:
         ):
             name = u.display_name or u.modid or u.jar_name
             how = _fetched_tag(result, u.new_jar)
-            old_v = u.old_version or "?"
-            new_v = u.new_version or "?"
+            old_v = display_version(u.old_version, u.jar_name)
+            new_v = display_version(u.new_version, u.new_jar)
             print(f"  {name}  {old_v} → {new_v}  [{how}]")
             print(term.dim(f"    {u.jar_name} → {u.new_jar}"))
         term.blank()
@@ -119,9 +138,6 @@ def print_check_summary(result: CheckResult, work) -> None:
             if detail:
                 print(term.dim(f"    {detail}"))
         term.blank()
-
-    if result.min_neoforge_floor:
-        print(f"Min NeoForge floor: {term.yellow(str(result.min_neoforge_floor))}")
 
     print(term.dim(f"Work root: {work}"))
     print(term.dim(f"Manifest:  {work / 'manifest.json'}"))
@@ -243,14 +259,7 @@ def cmd_check(args: argparse.Namespace) -> int:
         cf_api_key=getattr(args, "cf_api_key", None),
     )
     term.blank()
-    print_check_summary(result, work)
-    if result.min_neoforge_floor and inst.neoforge_version:
-        from .versions import neoforge_gte
-
-        cur = inst.neoforge_version
-        ok = neoforge_gte(cur, result.min_neoforge_floor)
-        flag = term.ok("yes") if ok else term.warn("no")
-        print(f"Current NeoForge {cur} satisfies floor: {flag}")
+    print_check_summary(result, work, current_neoforge=inst.neoforge_version)
     return 0 if not result.errors else 1
 
 
@@ -315,7 +324,7 @@ def cmd_all(args: argparse.Namespace) -> int:
         cf_api_key=getattr(args, "cf_api_key", None),
     )
     term.blank()
-    print_check_summary(result, work)
+    print_check_summary(result, work, current_neoforge=inst.neoforge_version)
     term.blank()
     if result.updates and not args.dry_run:
         print(term.section("=== apply ==="))

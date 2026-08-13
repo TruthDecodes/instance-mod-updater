@@ -79,6 +79,57 @@ def product_version(s: str) -> str:
     return raw[m.end() :].strip(" -_+.")
 
 
+_MC_IN_NAME_RE = re.compile(
+    r"(?:^|[\+\-_])((?:1\.(?:1[6-9]|2\d)|26)\.\d+(?:\.\d+)?)[\+\-_]",
+    re.I,
+)
+_LOADER_TAIL_RE = re.compile(r"[\+\-_]?(neoforge|forge|fabric|quilt)\b.*$", re.I)
+
+
+def version_from_jar_name(jar_name: str) -> str:
+    """Product version from a jar filename (after a leading Minecraft tag)."""
+    stem = (jar_name or "").replace("\\", "/").rsplit("/", 1)[-1]
+    if stem.lower().endswith(".jar"):
+        stem = stem[:-4]
+    if not stem:
+        return ""
+    m = _MC_IN_NAME_RE.search(stem)
+    if m:
+        rest = stem[m.end() :].strip(" -_+.")
+        rest = _LOADER_TAIL_RE.sub("", rest).strip(" -_+.")
+        if rest:
+            product = product_version(rest)
+            if product and not _looks_like_modern_mc(product):
+                return product
+            if not _looks_like_modern_mc(rest):
+                return rest
+    tokens = re.findall(
+        r"\d+(?:\.\d+)+(?:[-.]?(?:alpha|beta|rc)\.?\d*)?",
+        stem,
+        re.I,
+    )
+    for tok in reversed(tokens):
+        product = product_version(tok)
+        if product and not _looks_like_modern_mc(product):
+            return product
+        if not _looks_like_modern_mc(tok):
+            return tok
+    return tokens[-1] if tokens else ""
+
+
+def display_version(version: str | None, jar_name: str | None = None) -> str:
+    """Version a person should see: product number, not the Minecraft prefix."""
+    raw = (version or "").strip()
+    if raw:
+        product = product_version(raw)
+        if product and not _looks_like_modern_mc(product):
+            return product
+    from_jar = version_from_jar_name(jar_name or "")
+    if from_jar:
+        return from_jar
+    return raw or "?"
+
+
 def cmp_ver(a: str, b: str) -> int | None:
     """-1 / 0 / 1, or None if either side has no numeric version."""
     ab, ar, an = parse_ver(a)

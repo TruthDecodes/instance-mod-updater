@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2 - 2026-08-13
+
+- Check summary leads with NeoForge floor vs the installed loader
+- Update lines show the product version, not a Minecraft-only Modrinth tag
+- Drop the extra DONE counts and the second report/manifest path block
+
 ## 0.1.1 - 2026-08-13
 
 Console is meant to be read by a person, not only a report file.

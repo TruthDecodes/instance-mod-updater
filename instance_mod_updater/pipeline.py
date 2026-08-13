@@ -1346,13 +1346,7 @@ def check_updates(
                 rep.project = proj["slug"]
 
     _attach_error_layman(result)
-    check_line.end(
-        f"  Check done in {time.monotonic() - t_check:.1f}s  "
-        f"updates={len(result.updates)} downloaded={result.downloaded} "
-        f"cached={result.cached_jars} current={len(result.current)} "
-        f"pack_only={len(result.pack_only)} "
-        f"no_source={len(result.no_source)} errors={len(result.errors)}"
-    )
+    check_line.end(f"  Check done in {time.monotonic() - t_check:.1f}s")
 
     # After staging, re-read downloaded jars for higher NeoForge floors
     from .versions import neoforge_floor_for_mc, neoforge_tuple
@@ -1469,17 +1463,21 @@ def check_updates(
         "",
         "## Updates",
     ]
+    from .versions import display_version
+
     for u in sorted(result.updates, key=lambda x: (x.display_name or x.jar_name).lower()):
+        old_v = display_version(u.old_version, u.jar_name)
+        new_v = display_version(u.new_version, u.new_jar)
         if u.reason == "pack_ftb_only_pin_refresh":
             lines.append(
                 f"- **{u.display_name or u.jar_name}** [FTB pack re-sync, not a latest check]: "
-                f"`{u.old_version}` → pack `{u.new_version}`  \n"
+                f"`{old_v}` → pack `{new_v}`  \n"
                 f"  `{u.jar_name}` → `{u.new_jar}` ({u.reason})"
             )
         else:
             lines.append(
                 f"- **{u.display_name or u.jar_name}** [{u.source}/{u.channel}]: "
-                f"`{u.old_version}` → `{u.new_version}`  \n"
+                f"`{old_v}` → `{new_v}`  \n"
                 f"  `{u.jar_name}` → `{u.new_jar}` ({u.reason})"
             )
     lines += [
@@ -1540,18 +1538,6 @@ def check_updates(
             lines.append(f"  `{jar}` ({', '.join(bits)})")
     report_md.write_text("\n".join(lines) + "\n", encoding="utf-8")
     (work / "report-latest.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-    _log("", log)
-    _log(
-        f"DONE updates={len(result.updates)} downloaded={result.downloaded} "
-        f"cached={result.cached_jars} current={len(result.current)} "
-        f"pack_only={len(result.pack_only)} "
-        f"no_source={len(result.no_source)} errors={len(result.errors)} "
-        f"floor={result.min_neoforge_floor}",
-        log,
-    )
-    _log(f"Report: {report_path}", log)
-    _log(f"Manifest: {manifest_path}", log)
     return result, work
 
 

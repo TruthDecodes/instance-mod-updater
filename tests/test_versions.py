@@ -2,9 +2,11 @@ import unittest
 
 from instance_mod_updater.versions import (
     cmp_ver,
+    display_version,
     is_newer,
     parse_ver,
     product_version,
+    version_from_jar_name,
     version_in_maven_range,
 )
 
@@ -48,6 +50,30 @@ class MavenRangeTests(unittest.TestCase):
     def test_cmp_ver_pre_rank(self):
         self.assertEqual(cmp_ver("1.0.0", "1.0.0-beta.1"), 1)
         self.assertEqual(cmp_ver("1.0.0-beta.2", "1.0.0-beta.1"), 1)
+
+
+class DisplayVersionTests(unittest.TestCase):
+    def test_mc_first_string_drops_game(self):
+        self.assertEqual(display_version("26.1.2-2.0.3"), "2.0.3")
+        self.assertEqual(display_version("26.1.2-1.4.99.2266"), "1.4.99.2266")
+
+    def test_already_product_stays(self):
+        self.assertEqual(display_version("3.1.3"), "3.1.3")
+        self.assertEqual(display_version("2.8.0"), "2.8.0")
+
+    def test_mc_only_version_uses_jar_name(self):
+        self.assertEqual(
+            display_version("26.1.2", "ConstructionSticks-26.1.2-3.1.4.jar"),
+            "3.1.4",
+        )
+        self.assertEqual(
+            version_from_jar_name("appliedsticks-26.1.2-2.0.4.jar"),
+            "2.0.4",
+        )
+
+    def test_missing_falls_back_to_question(self):
+        self.assertEqual(display_version(None), "?")
+        self.assertEqual(display_version(""), "?")
 
 
 if __name__ == "__main__":
