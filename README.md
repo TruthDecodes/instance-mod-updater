@@ -38,6 +38,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\fetch-runtime.ps1
 Or copy the tree and run `scripts\fetch-runtime.ps1` the same way.
 
 ## Update the tool (from Public)
+**tldr; The tool self-updates upon running it.**
 
 The live install is `%PUBLIC%\instance-mod-updater`. That folder is also the work root (jars, reports, manifests). Updating must not wipe those.
 
@@ -71,7 +72,13 @@ Skip always: `set INSTANCE_UPDATER_NO_SELF_UPDATE=1`
 
 ## Quick start
 
-**Prefer `run.cmd`**. It is not blocked by PowerShell’s default `Restricted` execution policy.
+Change to the directory you placed the files in.
+Run `.\run.cmd` to see on-screen help.
+Run `.\run.cmd list` to see your FTB instances/modpacks installed.
+Run `.\run.cmd check -i "<modpack_name>"` to check (and download) the latest mods for the pack.
+Run `.\run.cmd apply` to apply all downloaded mods to the pack(s).
+
+**Use `run.cmd.` `run.ps1` is also currently available for those that want it.**. PowerShell is by default blocked by `Restricted` execution policy; .cmd is not.
 
 ```powershell
 cd C:\Users\Public\instance-mod-updater
