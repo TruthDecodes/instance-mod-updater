@@ -6,9 +6,6 @@ Do not treat it as ready for anyone else. Not an official Feed the Beast product
 Update **mods on an existing FTB App instance** (your real modlist stays where it is).
 Does **not** migrate you to Prism or rebuild a pack.
 
-If you already have `%PUBLIC%\ftb-instance-updater`, move that tree to
-`%PUBLIC%\instance-mod-updater` so staged jars and manifests come along.
-
 License: [MIT](LICENSE). Copyright 2026 Truth. Security: [SECURITY.md](SECURITY.md).
 
 | Source | Auth |
