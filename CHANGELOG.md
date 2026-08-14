@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.4 - 2026-08-14
+
+- `downloaded` is one color (magenta) on the count, the `[downloaded]` tag, and the status tokens. Not cyan. Not the default white.
+
 ## 0.1.3 - 2026-08-13
 
 - Self-update installs only a signed GitHub Release zip. The Ed25519 public key is baked into the running updater. Floating `main` zips and unsigned git fast-forwards are gone.

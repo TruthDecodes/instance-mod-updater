@@ -1,6 +1,6 @@
 # Mod updater for FTB App instances
 
-**Unfinished.** Version 0.1.3. Personal snapshot, not a release. No support.
+**Unfinished.** Version 0.1.4. Personal snapshot, not a release. No support.
 Do not treat it as ready for anyone else. Not an official Feed the Beast product.
 
 Update **mods on an existing FTB App instance** (your real modlist stays where it is).

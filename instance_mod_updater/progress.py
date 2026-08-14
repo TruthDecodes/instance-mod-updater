@@ -184,8 +184,8 @@ def _style_counts(msg: str) -> str:
         hot = {
             "updates": term.cyan,
             "upd": term.cyan,
-            "downloaded": term.cyan,
-            "dl": term.cyan,
+            "downloaded": term.magenta,
+            "dl": term.magenta,
             "cached": term.cyan,
             "current": term.green,
             "ok": term.green,

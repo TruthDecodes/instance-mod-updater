@@ -16,13 +16,14 @@ from .pipeline import CheckResult, apply_manifest, check_updates, error_layman, 
 
 
 def _count(label: str, n: int, *, hot: str | None = None) -> str:
-    """label=n with optional color when n > 0 (hot=green|cyan|yellow|red)."""
+    """label=n with optional color when n > 0 (hot=green|cyan|magenta|yellow|red)."""
     text = f"{label}: {n}"
     if n <= 0 or not hot:
         return text
     paint = {
         "green": term.green,
         "cyan": term.cyan,
+        "magenta": term.magenta,
         "yellow": term.yellow,
         "red": term.red,
     }.get(hot)
@@ -53,7 +54,7 @@ def _error_detail(row: dict) -> str:
 
 def _fetched_tag(result: CheckResult, new_jar: str) -> str:
     if new_jar in result.downloaded_files:
-        return "downloaded"
+        return term.magenta("downloaded")
     if new_jar in result.cached_files:
         return "already staged"
     return "listed"
@@ -80,7 +81,7 @@ def print_check_summary(
         print(_neoforge_floor_line(result.min_neoforge_floor, current_neoforge))
     parts = [
         _count("updates", len(result.updates), hot="cyan"),
-        _count("downloaded", result.downloaded, hot="cyan"),
+        _count("downloaded", result.downloaded, hot="magenta"),
         _count("cached", result.cached_jars),
         _count("current", len(result.current), hot="green"),
         _count("uncheckable", len(result.pack_only), hot="yellow"),

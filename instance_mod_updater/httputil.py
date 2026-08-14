@@ -11,7 +11,7 @@ from typing import Any, Callable, TypeVar
 
 from .progress import ProgressBar, announce_transfer
 
-DEFAULT_UA = "instance-mod-updater/0.1.3 (+https://github.com/TruthDecodes/instance-mod-updater)"
+DEFAULT_UA = "instance-mod-updater/0.1.4 (+https://github.com/TruthDecodes/instance-mod-updater)"
 
 # Only show a progress bar for transfers at least this large
 PROGRESS_MIN_BYTES = 256 * 1024

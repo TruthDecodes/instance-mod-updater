@@ -148,6 +148,51 @@ class CheckSummaryTests(unittest.TestCase):
         self.assertIn("3.1.3 → 3.1.4", out)
         self.assertNotIn("3.1.3 → 26.1.2", out)
 
+    def test_downloaded_word_is_magenta_not_cyan(self):
+        import os
+
+        old_no_color = os.environ.pop("NO_COLOR", None)
+        term.init(color="always")
+
+        def _restore() -> None:
+            if old_no_color is None:
+                os.environ.pop("NO_COLOR", None)
+            else:
+                os.environ["NO_COLOR"] = old_no_color
+            term.init(color="never")
+
+        self.addCleanup(_restore)
+        result = CheckResult(
+            instance="x",
+            mc_version="26.1.2",
+            loader="neoforge",
+            mod_loader="neoforge",
+            downloaded=1,
+            downloaded_files=["new-a.jar"],
+        )
+        result.updates = [
+            Replacement(
+                jar_name="old-a.jar",
+                new_jar="new-a.jar",
+                old_version="1.0",
+                new_version="1.1",
+                channel="release",
+                source="modrinth",
+                reason="release_available",
+                url="https://example.invalid/a",
+                display_name="Mod A",
+            ),
+        ]
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            print_check_summary(result, Path("/tmp/work"))
+        out = buf.getvalue()
+        painted = term.magenta("downloaded")
+        self.assertIn(painted, out)
+        self.assertTrue(painted.startswith("\033[95m"))
+        self.assertNotIn("\033[96mdownloaded", out)
+        self.assertNotIn("\033[94mdownloaded", out)
+
     def test_neoforge_floor_leads_summary_not_footer(self):
         result = CheckResult(
             instance="x",
