@@ -11,6 +11,7 @@ from typing import Any, Callable
 
 from . import curseforge, httputil, modrinth, neoforge, pack_manifest
 from .app_local import Instance, bin_dir, default_ftba_root, default_work_root
+from .filenames import safe_jar_filename, safe_jar_path
 from .inventory import (
     PLATFORM_MODIDS,
     InstalledMod,
@@ -180,8 +181,8 @@ def _planned_dep_sources(
     for mod in mods:
         upd = by_old.get(mod.jar_name)
         if upd:
-            staged = jars_dir / upd.new_jar
-            if not staged.is_file():
+            staged = safe_jar_path(jars_dir, upd.new_jar)
+            if staged is None or not staged.is_file():
                 continue
             meta = read_mod_metadata(staged)
             deps = list(meta.get("dependencies") or [])
@@ -212,8 +213,8 @@ def _effective_companion_version(
 ) -> str:
     need = (need_id or companion.modid or "").lower()
     if upd:
-        staged = jars_dir / upd.new_jar
-        if staged.is_file():
+        staged = safe_jar_path(jars_dir, upd.new_jar)
+        if staged is not None and staged.is_file():
             meta = read_mod_metadata(staged)
             versions = meta.get("mod_versions") or {}
             ver = versions.get(need) or meta.get("version")
@@ -391,13 +392,33 @@ def _satisfy_mandatory_deps(
                     )
                     f = modrinth.pick_primary_jar_file(cand) if cand else None
                     if cand and f:
-                        new_name = f["filename"]
+                        new_name = safe_jar_filename(f["filename"])
+                        if not new_name:
+                            failed.add(key)
+                            result.errors.append(
+                                {
+                                    "jar": companion.jar_name,
+                                    "err": "unsafe_filename",
+                                    "reason": "mandatory_dep",
+                                }
+                            )
+                            continue
                         url = f["url"]
                         if new_name != companion.jar_name and (
                             not upd or upd.new_jar != new_name
                         ):
                             if download:
-                                dest = jars_dir / new_name
+                                dest = safe_jar_path(jars_dir, new_name)
+                                if dest is None:
+                                    failed.add(key)
+                                    result.errors.append(
+                                        {
+                                            "jar": companion.jar_name,
+                                            "err": "unsafe_filename",
+                                            "reason": "mandatory_dep",
+                                        }
+                                    )
+                                    continue
                                 if not stage_jar(
                                     url, dest, ua=httputil.DEFAULT_UA, label=new_name
                                 ):
@@ -450,7 +471,17 @@ def _satisfy_mandatory_deps(
                             files, game=mc, loader=loader, range_s=rng
                         )
                         if cand_f:
-                            new_name = cand_f["fileName"]
+                            new_name = safe_jar_filename(cand_f["fileName"])
+                            if not new_name:
+                                failed.add(key)
+                                result.errors.append(
+                                    {
+                                        "jar": companion.jar_name,
+                                        "err": "unsafe_filename",
+                                        "reason": "mandatory_dep",
+                                    }
+                                )
+                                continue
                             new_id = int(cand_f["id"])
                             got = curseforge.resolve_download(
                                 project_id, new_id, new_name
@@ -474,7 +505,17 @@ def _satisfy_mandatory_deps(
                                 not upd or upd.new_jar != new_name
                             ):
                                 if download:
-                                    dest = jars_dir / new_name
+                                    dest = safe_jar_path(jars_dir, new_name)
+                                    if dest is None:
+                                        failed.add(key)
+                                        result.errors.append(
+                                            {
+                                                "jar": companion.jar_name,
+                                                "err": "unsafe_filename",
+                                                "reason": "mandatory_dep",
+                                            }
+                                        )
+                                        continue
                                     try:
                                         ok = stage_jar(
                                             url,
@@ -872,13 +913,18 @@ def check_updates(
 
     def _stage_jar(
         url: str,
-        dest: Path,
+        dest: Path | None,
         *,
         ua: str,
         label: str,
         alt_url: str | None = None,
     ) -> bool:
         """Download if missing; count dl vs cached. False if result unusable."""
+        if dest is None:
+            return False
+        dest = safe_jar_path(jars_dir, dest.name)
+        if dest is None:
+            return False
         check_line.park()
         if dest.exists() and dest.stat().st_size > 0:
             result.cached_jars += 1
@@ -935,7 +981,10 @@ def check_updates(
                 if not f:
                     result.errors.append({"jar": mod.jar_name, "err": "no_file"})
                     continue
-                new_name = f["filename"]
+                new_name = safe_jar_filename(f["filename"])
+                if not new_name:
+                    result.errors.append({"jar": mod.jar_name, "err": "unsafe_filename"})
+                    continue
                 url = f["url"]
                 if new_name == mod.jar_name:
                     result.current.append(
@@ -943,7 +992,10 @@ def check_updates(
                     )
                     continue
                 if download:
-                    dest = jars_dir / new_name
+                    dest = safe_jar_path(jars_dir, new_name)
+                    if dest is None:
+                        result.errors.append({"jar": mod.jar_name, "err": "unsafe_filename"})
+                        continue
                     if not _stage_jar(url, dest, ua=httputil.DEFAULT_UA, label=new_name):
                         result.errors.append(
                             {"jar": mod.jar_name, "err": "tiny_download", "url": url}
@@ -1050,7 +1102,10 @@ def check_updates(
                     if not f:
                         result.errors.append({"jar": mod.jar_name, "err": "no_file"})
                         continue
-                    new_name = f["filename"]
+                    new_name = safe_jar_filename(f["filename"])
+                    if not new_name:
+                        result.errors.append({"jar": mod.jar_name, "err": "unsafe_filename"})
+                        continue
                     url = f["url"]
                     if new_name == mod.jar_name:
                         result.current.append(
@@ -1063,7 +1118,10 @@ def check_updates(
                         )
                         continue
                     if download:
-                        dest = jars_dir / new_name
+                        dest = safe_jar_path(jars_dir, new_name)
+                        if dest is None:
+                            result.errors.append({"jar": mod.jar_name, "err": "unsafe_filename"})
+                            continue
                         if not _stage_jar(url, dest, ua=httputil.DEFAULT_UA, label=new_name):
                             result.errors.append(
                                 {"jar": mod.jar_name, "err": "tiny_download", "url": url}
@@ -1129,8 +1187,27 @@ def check_updates(
                         continue
                     # Local SHA differs. Optional re-sync to pack URL only (not latest).
                     if pack_url and pack_name:
+                        pack_name = safe_jar_filename(pack_name) or ""
+                        if not pack_name:
+                            result.errors.append(
+                                {
+                                    "jar": mod.jar_name,
+                                    "err": "unsafe_filename",
+                                    "reason": "pack_ftb_only",
+                                }
+                            )
+                            continue
                         if download:
-                            dest = jars_dir / pack_name
+                            dest = safe_jar_path(jars_dir, pack_name)
+                            if dest is None:
+                                result.errors.append(
+                                    {
+                                        "jar": mod.jar_name,
+                                        "err": "unsafe_filename",
+                                        "reason": "pack_ftb_only",
+                                    }
+                                )
+                                continue
                             try:
                                 ok = _stage_jar(
                                     pack_url,
@@ -1252,7 +1329,10 @@ def check_updates(
                     }
                 )
                 continue
-            new_name = upd["fileName"]
+            new_name = safe_jar_filename(upd["fileName"])
+            if not new_name:
+                result.errors.append({"jar": mod.jar_name, "err": "unsafe_filename"})
+                continue
             new_id = int(upd["id"])
             got = curseforge.resolve_download(project_id, new_id, new_name)
             if not got.url:
@@ -1276,7 +1356,10 @@ def check_updates(
                 continue
             url = got.url
             if download:
-                dest = jars_dir / new_name
+                dest = safe_jar_path(jars_dir, new_name)
+                if dest is None:
+                    result.errors.append({"jar": mod.jar_name, "err": "unsafe_filename"})
+                    continue
                 try:
                     ok = _stage_jar(
                         url,
@@ -1356,8 +1439,8 @@ def check_updates(
     if base_floor:
         floors.append(base_floor)
     for rep in result.updates:
-        p = jars_dir / rep.new_jar
-        if not p.is_file():
+        p = safe_jar_path(jars_dir, rep.new_jar)
+        if p is None or not p.is_file():
             continue
         meta = read_mod_metadata(p)
         rng = meta.get("loaderVersion")
@@ -1618,7 +1701,9 @@ def apply_manifest(
         for name in (rep.get("old_jar"), rep.get("new_jar")):
             if not name:
                 continue
-            p = mods_dir / name
+            p = safe_jar_path(mods_dir, name)
+            if p is None:
+                continue
             if _file_locked(p):
                 locked.append(str(p))
     if locked:
@@ -1643,11 +1728,19 @@ def apply_manifest(
 
     applied = skipped = failed = 0
     for rep in replacements:
-        old_name = rep["old_jar"]
-        new_name = rep["new_jar"]
-        old_path = mods_dir / old_name
-        new_path = jars_dir / new_name
-        dest_path = mods_dir / new_name
+        old_name = safe_jar_filename(rep["old_jar"])
+        new_name = safe_jar_filename(rep["new_jar"])
+        if not old_name or not new_name:
+            _log(f"SKIP unsafe jar name in manifest: {rep.get('old_jar')!r} -> {rep.get('new_jar')!r}", log)
+            failed += 1
+            continue
+        old_path = safe_jar_path(mods_dir, old_name)
+        new_path = safe_jar_path(jars_dir, new_name)
+        dest_path = safe_jar_path(mods_dir, new_name)
+        if old_path is None or new_path is None or dest_path is None:
+            _log(f"SKIP unsafe jar path: {old_name} -> {new_name}", log)
+            failed += 1
+            continue
         if not new_path.is_file():
             _log(f"MISSING new jar: {new_name}", log)
             failed += 1

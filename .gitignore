@@ -33,6 +33,10 @@ venv/
 .env.*
 *.pem
 *.key
+*.ed25519
+
+# Built release zips (signed copies live on GitHub Releases)
+/dist/
 
 # OS / editor
 .DS_Store

@@ -3,6 +3,9 @@
 .SYNOPSIS
   Download Windows embeddable CPython into runtime\python for offline use.
   Prefer this over the Microsoft Store "python" stub.
+
+  The zip is hashed before extract. Pins are the official python.org MD5
+  plus the SHA256 from that release's SPDX SBOM.
 #>
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
@@ -10,10 +13,21 @@ $Dest = Join-Path $Root 'runtime\python'
 $Ver = '3.12.10'
 $ZipName = "python-$Ver-embed-amd64.zip"
 $Url = "https://www.python.org/ftp/python/$Ver/$ZipName"
+$ExpectSha256 = '4acbed6dd1c744b0376e3b1cf57ce906f9dc9e95e68824584c8099a63025a3c3'
+$ExpectMd5 = 'fe8ef205f2e9c3ba44d0cf9954e1abd3'
 $Tmp = Join-Path $env:TEMP $ZipName
 
 Write-Host "Downloading $Url ..."
 Invoke-WebRequest -Uri $Url -OutFile $Tmp -UseBasicParsing
+
+$sha = (Get-FileHash -LiteralPath $Tmp -Algorithm SHA256).Hash.ToLowerInvariant()
+$md5 = (Get-FileHash -LiteralPath $Tmp -Algorithm MD5).Hash.ToLowerInvariant()
+if ($sha -ne $ExpectSha256 -or $md5 -ne $ExpectMd5) {
+  Remove-Item -LiteralPath $Tmp -Force -ErrorAction SilentlyContinue
+  throw "Checksum mismatch for $ZipName (sha256=$sha md5=$md5). Refusing to extract."
+}
+Write-Host "Checksum OK ($ExpectSha256)"
+
 if (Test-Path -LiteralPath $Dest) {
   Remove-Item -LiteralPath $Dest -Recurse -Force
 }

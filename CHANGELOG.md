@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.3 - 2026-08-13
+
+- Self-update installs only a signed GitHub Release zip. The Ed25519 public key is baked into the running updater. Floating `main` zips and unsigned git fast-forwards are gone.
+- `scripts\fetch-runtime.ps1` checks the official python.org embed zip (SHA256 + MD5) before extract
+- Stage and apply reject jar names that leave the mods/jars folders
+- Dropped `scripts\copy-mc-logs.ps1` from the public tree
+
 ## 0.1.2 - 2026-08-13
 
 - Check summary leads with NeoForge floor vs the installed loader

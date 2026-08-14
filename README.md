@@ -1,6 +1,6 @@
 # Mod updater for FTB App instances
 
-**Unfinished.** Version 0.1.2. Personal snapshot, not a release. No support.
+**Unfinished.** Version 0.1.3. Personal snapshot, not a release. No support.
 Do not treat it as ready for anyone else. Not an official Feed the Beast product.
 
 Update **mods on an existing FTB App instance** (your real modlist stays where it is).
@@ -14,7 +14,7 @@ License: [MIT](LICENSE). Copyright 2026 Truth. Security: [SECURITY.md](SECURITY.
 | Source | Auth |
 | --- | --- |
 | **Modrinth** | Public API (jar SHA1 identity; exact `GET /project/{modid\|stem}` when hash misses) |
-| **CurseForge** | Official [Core API](https://docs.curseforge.com/rest-api/) (`api.curseforge.com` + `x-api-key`). File list, download URL, and fingerprint match. Needs an approved key (`CURSEFORGE_API_KEY`, `CF_API_KEY`, or `--cf-api-key`). Without a key, CurseForge-only jars are reported uncheckable. Project ids may come from the FTB pack manifest or from a fingerprint hit. No CurseForge search. |
+| **CurseForge** | Official [Core API](https://docs.curseforge.com/rest-api/) (`api.curseforge.com` + `x-api-key`). File list, download URL, and fingerprint match. Needs an approved key (`CURSEFORGE_API_KEY` or `CF_API_KEY`; `--cf-api-key` also works but shows up on the process command line). Without a key, CurseForge-only jars are reported uncheckable. Project ids may come from the FTB pack manifest or from a fingerprint hit. No CurseForge search. |
 | **NeoForge** | Official Maven installer into FTB App `bin\` |
 
 ## Requirements
@@ -44,7 +44,7 @@ Or copy the tree and run `scripts\fetch-runtime.ps1` the same way.
 
 The live install is `%PUBLIC%\instance-mod-updater`. That folder is also the work root (jars, reports, manifests). Updating must not wipe those.
 
-`run.cmd` / `run.ps1` **self-update from GitHub before each command**. Only app code is replaced:
+`run.cmd` / `run.ps1` **self-update from a signed GitHub Release before each command**. Only app code is replaced:
 
 - `instance_mod_updater\`, `scripts\`, `tests\`
 - `run.cmd`, `run.ps1`, `run-bypass.ps1`, `deploy.cmd`
@@ -67,7 +67,7 @@ cd C:\Users\Public\instance-mod-updater
 
 `deploy.cmd` is the one-shot you can drop into Public if the tree is stale. After that, `run.cmd` keeps itself current.
 
-A git clone uses `git fetch` + fast-forward only (never `reset --hard` / `clean`). A copy-without-git install extracts a zip of the GitHub default branch.
+Updates come only from a GitHub Release zip that verifies with the Ed25519 public key baked into the running updater. Floating `main` zips are not used.
 
 Skip always: `set INSTANCE_UPDATER_NO_SELF_UPDATE=1`
 (`FTB_NO_SELF_UPDATE` is still honored as an alias.)
@@ -151,7 +151,7 @@ https://api.feed-the-beast.com/v1/modpacks/public/modpack/{packId}/{versionId}
 | Command | What it does |
 | --- | --- |
 | `list` | List FTB instances |
-| `self-update` | Refresh app code from GitHub (same as `deploy.cmd`); does not touch work files |
+| `self-update` | Refresh app code from a signed GitHub Release (same as `deploy.cmd`); does not touch work files |
 | `check` | Hash jars → Modrinth + (if a CF key is set) official CurseForge file lists and optional fingerprint cascade; then mandatory inter-mod `versionRange` on staged/remaining jars; stage jars + `manifest.json` + reports. Status: `upd` planned, `dl` transferred, `cached` already in work/jars; `uncheckable` with why |
 | `apply` | Backup old jars, copy staged jars into instance `mods\` (refuses if jars locked) |
 | `upgrade-loader` | NeoForge client install into `.ftba\bin`, retarget `instance.json` |
@@ -165,16 +165,16 @@ Console uses light ANSI colors when the terminal supports them (Windows Terminal
 
 | Script | Purpose |
 | --- | --- |
-| `deploy.cmd` | Refresh app code from GitHub; leave runtime and work files alone |
-| `scripts\self-update.ps1` | Same updater (used if the Python module is not on disk yet) |
-| `scripts\fetch-runtime.ps1` | Download embeddable CPython into `runtime\python\` |
-| `scripts\copy-mc-logs.ps1` | Copy instance `latest.log` (+ crash reports) to `C:\Users\Public\mc-crash-dump\` |
+| `deploy.cmd` | Refresh app code from a signed GitHub Release; leave runtime and work files alone |
+| `scripts\self-update.ps1` | Thin launcher that calls the Python verifier |
+| `scripts\fetch-runtime.ps1` | Download embeddable CPython into `runtime\python\` (SHA256 pinned) |
+| `scripts\sign-release.py` | Maintainer: pack and sign a release zip (needs the offline key) |
 
 ## After loader upgrade
 
 1. Launch from **FTB App**.
 2. If FTB offers to reinstall the pack’s pinned loader, **decline** / keep the custom NeoForge version.
-3. On failure: `scripts\copy-mc-logs.ps1` then inspect `C:\Users\Public\mc-crash-dump\logs\latest.log`.
+3. On failure: inspect the instance `logs\latest.log` under `%LOCALAPPDATA%\.ftba\instances\<name>\`.
 
 ## Safety
 
@@ -192,7 +192,7 @@ instance-mod-updater/
   scripts/
     self-update.ps1
     fetch-runtime.ps1
-    copy-mc-logs.ps1
+    sign-release.py
   instance_mod_updater/
     cli.py
     pipeline.py

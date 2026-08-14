@@ -2,7 +2,7 @@
 setlocal EnableExtensions
 cd /d "%~dp0"
 
-REM Update instance-mod-updater app code under this folder from GitHub.
+REM Update instance-mod-updater app code from a signed GitHub Release.
 REM This tool updates mods on an existing FTB App instance. Not an official Feed the Beast product.
 REM Leaves runtime, staged jars, reports, manifests, backups, and extra local files alone.
 REM Usage (from C:\Users\Public\instance-mod-updater):
@@ -14,7 +14,6 @@ set "ROOT=%~dp0"
 set "PYTHONPATH=%ROOT%"
 set "PYTHONUTF8=1"
 set "PY="
-set "PS1=%ROOT%scripts\self-update.ps1"
 
 if exist "%ROOT%runtime\python\python.exe" set "PY=%ROOT%runtime\python\python.exe"
 if not defined PY (
@@ -37,16 +36,9 @@ if defined PY if exist "%ROOT%instance_mod_updater\self_update.py" (
   exit /b %ERRORLEVEL%
 )
 
-if not exist "%ROOT%scripts" mkdir "%ROOT%scripts"
-if not exist "%PS1%" (
-  echo self-update: downloading updater...
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/TruthDecodes/instance-mod-updater/main/scripts/self-update.ps1' -OutFile '%PS1%' -UseBasicParsing"
-  if errorlevel 1 (
-    echo self-update: could not download scripts\self-update.ps1
-    echo Copy that file from the repo into this folder and run deploy.cmd again.
-    exit /b 1
-  )
-)
-
-powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%" %*
-exit /b %ERRORLEVEL%
+echo self-update: need Python 3.11+ and instance_mod_updater\self_update.py
+echo A signed GitHub Release is required. Unsigned default-branch zips are not used.
+echo   1. Unpack a signed release, or clone the repo
+echo   2. Run: powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%scripts\fetch-runtime.ps1"
+echo   3. Run deploy.cmd again
+exit /b 1

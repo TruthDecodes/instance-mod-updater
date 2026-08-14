@@ -490,7 +490,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Refresh app code from GitHub; leave runtime and work files alone",
     )
     ps.add_argument("--root", type=Path, default=None, help="Install folder (default: this checkout)")
-    ps.add_argument("--ref", default=None, help="Branch, tag, or commit (default: GitHub default branch)")
+    ps.add_argument("--ref", default=None, help="Signed release tag (default: latest newer signed release)")
     ps.add_argument("--check-only", action="store_true", help="Print status only")
     ps.set_defaults(func=cmd_self_update)
 

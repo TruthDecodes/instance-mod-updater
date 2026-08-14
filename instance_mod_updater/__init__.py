@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 __all__ = ["__version__"]
 
 

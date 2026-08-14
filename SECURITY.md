@@ -19,17 +19,20 @@ On a Windows machine it can:
   (when an approved key is set), and FTB pack file URLs
 - Write into the instance `mods` folder after a backup
 - Install a NeoForge client into the FTB App `bin` folder
-- Replace its own app files from `TruthDecodes/instance-mod-updater` on GitHub
+- Replace its own app files from a **signed** GitHub Release of
+  `TruthDecodes/instance-mod-updater`
 
 It does not send your world saves or Microsoft account tokens. It does talk to
 public mod APIs and to GitHub for self-update.
 
 ## Self-update
 
-`run.cmd` and `deploy.cmd` pull the default branch of this GitHub repository
-(git fast-forward, or a zip of that branch). Anyone with write access to this
-repo can change the code that lands on your PC. Do not add collaborators you
-do not trust. Skip a launch with `--no-self-update` or
+`run.cmd` and `deploy.cmd` install only a newer **GitHub Release** whose zip
+verifies against an Ed25519 public key baked into the already-running updater.
+The private key is not in this repository and is not used by GitHub Actions.
+A push to `main` is not enough to land code on installed copies.
+
+Skip a launch with `--no-self-update` or
 `INSTANCE_UPDATER_NO_SELF_UPDATE=1` (`FTB_NO_SELF_UPDATE` is still honored as an alias).
 
 ## Secrets
@@ -37,9 +40,10 @@ do not trust. Skip a launch with `--no-self-update` or
 Do not put API keys in this repository.
 
 A CurseForge Core API key may be supplied at run time
-(`CURSEFORGE_API_KEY`, `CF_API_KEY`, or `--cf-api-key`). CurseForge file lists,
-download URLs, and fingerprint lookup need that key. Keep it in your
-environment, not in a file that gets copied or committed.
+(`CURSEFORGE_API_KEY` or `CF_API_KEY`). Prefer the environment: `--cf-api-key`
+is visible on the process command line. CurseForge file lists, download URLs,
+and fingerprint lookup need that key. Keep it in your environment, not in a
+file that gets copied or committed.
 
 ## Assumptions
 

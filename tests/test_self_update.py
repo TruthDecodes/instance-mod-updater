@@ -1,12 +1,18 @@
+import io
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
+from instance_mod_updater import _ed25519
 from instance_mod_updater.self_update import (
     ALLOW_DIRS,
     ALLOW_FILES,
+    UPDATE_PUBLIC_KEY_HEX,
     copy_code_tree,
+    extract_allowlisted_zip,
     is_allowed_rel,
+    verify_release_zip,
 )
 
 
@@ -77,5 +83,40 @@ class CopyCodeTreeTests(unittest.TestCase):
             self.assertFalse((dest / "instance_mod_updater" / "__pycache__").exists())
 
 
+class ExtractAllowlistedZipTests(unittest.TestCase):
+    def test_skips_zip_slip_and_local_overlay(self):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("instance-mod-updater-0.1.3/run.cmd", "ok\n")
+            zf.writestr("instance-mod-updater-0.1.3/local/overlay.py", "nope\n")
+            zf.writestr("../escape.cmd", "bad\n")
+            zf.writestr("instance-mod-updater-0.1.3/jars/evil.jar", "bad\n")
+        buf.seek(0)
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp)
+            with zipfile.ZipFile(buf) as zf:
+                copied = extract_allowlisted_zip(zf, dest)
+            self.assertIn("run.cmd", copied)
+            self.assertTrue((dest / "run.cmd").is_file())
+            self.assertFalse((dest / "local" / "overlay.py").exists())
+            self.assertFalse((dest / "escape.cmd").exists())
+            self.assertFalse((dest / "jars" / "evil.jar").exists())
+
+
+class SignatureTests(unittest.TestCase):
+    def test_verify_uses_baked_key_constant_shape(self):
+        self.assertEqual(len(bytes.fromhex(UPDATE_PUBLIC_KEY_HEX)), 32)
+
+    def test_accepts_matching_sig_and_rejects_wrong_bytes(self):
+        seed = _ed25519.generate_seed()
+        pk = _ed25519.publickey(seed)
+        blob = b"zip-bytes"
+        sig = _ed25519.sign(seed, blob)
+        verify_release_zip(blob, sig.hex().encode("ascii"), public_key_hex=pk.hex())
+        with self.assertRaises(RuntimeError):
+            verify_release_zip(blob + b"x", sig, public_key_hex=pk.hex())
+
+
 if __name__ == "__main__":
     unittest.main()
+
