@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from . import _release_mark
 from . import httputil
 from .versions import (
     exact_game_in_tags,
@@ -24,6 +25,7 @@ API_BASE = "https://api.curseforge.com"
 # Public HTTPS origin for Core-shaped ops when no local unique application key.
 PUBLISHER_ORIGIN = "https://truthimu.duckdns.org"
 ENROLL_PATH = "/imu/enroll"
+MIN_RELEASE_MARK_LEN = 32
 MC_GAME_ID = 432
 # Whitespace bytes CF strips before murmur2 fingerprinting
 _CF_STRIP = {9, 10, 13, 32}
@@ -87,8 +89,18 @@ def _write_publisher_token(token: str) -> None:
         pass
 
 
+def _publisher_mark() -> str | None:
+    mark = str(getattr(_release_mark, "MARK", "") or "").strip()
+    if len(mark) < MIN_RELEASE_MARK_LEN:
+        return None
+    return mark
+
+
 def _enroll_publisher_token(origin: str) -> str | None:
-    data = httputil.post_json(f"{origin.rstrip('/')}{ENROLL_PATH}", {})
+    mark = _publisher_mark()
+    if not mark:
+        return None
+    data = httputil.post_json(f"{origin.rstrip('/')}{ENROLL_PATH}", {"k": mark})
     if not isinstance(data, dict):
         return None
     token = str(data.get("token") or "").strip()
@@ -128,6 +140,8 @@ def _cf_get_json(url: str, *, api_key: str | None) -> Any:
     headers = _request_headers(api_key)
     if api_key:
         return httputil.get_json(url, ua=UA, headers=headers)
+    if not headers:
+        return None
     try:
         return httputil.get_json(
             url, ua=UA, headers=headers, on_unauthorized="raise"
@@ -135,6 +149,8 @@ def _cf_get_json(url: str, *, api_key: str | None) -> Any:
     except httputil.HttpUnauthorized:
         _publisher_bearer(PUBLISHER_ORIGIN, force=True)
         headers = _request_headers(None)
+        if not headers:
+            return None
         try:
             return httputil.get_json(
                 url, ua=UA, headers=headers, on_unauthorized="raise"
@@ -147,6 +163,8 @@ def _cf_post_json(url: str, body: Any, *, api_key: str | None) -> Any:
     headers = _request_headers(api_key)
     if api_key:
         return httputil.post_json(url, body, ua=UA, headers=headers)
+    if not headers:
+        return None
     try:
         return httputil.post_json(
             url, body, ua=UA, headers=headers, on_unauthorized="raise"
@@ -154,6 +172,8 @@ def _cf_post_json(url: str, body: Any, *, api_key: str | None) -> Any:
     except httputil.HttpUnauthorized:
         _publisher_bearer(PUBLISHER_ORIGIN, force=True)
         headers = _request_headers(None)
+        if not headers:
+            return None
         try:
             return httputil.post_json(
                 url, body, ua=UA, headers=headers, on_unauthorized="raise"

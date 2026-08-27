@@ -93,6 +93,11 @@ class PublicHygieneTests(unittest.TestCase):
                     hits.append(f"{rel}: {needle}")
         self.assertEqual(hits, [], "forbidden public-tree strings")
 
+    def test_tracked_release_mark_is_empty(self):
+        from instance_mod_updater._release_mark import MARK
+
+        self.assertEqual(MARK, "")
+
 
 if __name__ == "__main__":
     unittest.main()

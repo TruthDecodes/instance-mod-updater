@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
-from instance_mod_updater import curseforge, httputil
+from instance_mod_updater import _release_mark, curseforge, httputil
 from instance_mod_updater.curseforge import (
     API_BASE,
     ENROLL_PATH,
@@ -62,6 +62,10 @@ class OfficialAdapterTests(unittest.TestCase):
         )
         env.start()
         self.addCleanup(env.stop)
+        self.release_mark = "R" * 43
+        mark = patch.object(_release_mark, "MARK", self.release_mark)
+        mark.start()
+        self.addCleanup(mark.stop)
 
     def _get_json(self, url, **_kwargs):
         path = urlparse(url).path.rstrip("/")
@@ -291,6 +295,13 @@ class OfficialAdapterTests(unittest.TestCase):
             if urlparse(call.args[0]).path.rstrip("/") == ENROLL_PATH
         ]
         self.assertTrue(enrolls)
+        enroll_bodies = [
+            call.args[1]
+            for call in post_json.call_args_list
+            if urlparse(call.args[0]).path.rstrip("/") == ENROLL_PATH
+        ]
+        self.assertTrue(enroll_bodies)
+        self.assertEqual(enroll_bodies[0], {"k": self.release_mark})
         self.assertEqual(self.token_path.read_text(encoding="utf-8").strip(), issued)
         auth_headers = []
         for call in list(get_json.call_args_list) + list(post_json.call_args_list):
@@ -339,6 +350,18 @@ class OfficialAdapterTests(unittest.TestCase):
         self.assertGreaterEqual(len(auths), 2)
         self.assertEqual(auths[0], f"Bearer {INSTALL_TOKEN}")
         self.assertEqual(auths[-1], f"Bearer {issued}")
+
+    @patch("instance_mod_updater.httputil.post_json")
+    @patch("instance_mod_updater.httputil.get_json")
+    def test_empty_release_mark_does_not_enroll(self, get_json, post_json):
+        self.token_path.unlink()
+        curseforge._reset_publisher_token_cache()
+        with patch.object(_release_mark, "MARK", ""):
+            with _no_cf_key():
+                files = list_cf_files("1", "1.20.1")
+        self.assertFalse(files)
+        get_json.assert_not_called()
+        post_json.assert_not_called()
 
 
 if __name__ == "__main__":

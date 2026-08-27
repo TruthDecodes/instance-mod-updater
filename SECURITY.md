@@ -50,6 +50,14 @@ CurseForge key and is not proof that the caller is this app.
 Keep any unique CurseForge key in your environment, not in a file that gets
 copied or committed.
 
+## Service access
+
+The MIT license is for this software. It does not grant use of any network
+service the official application contacts. Those services exist only for
+official signed releases of instance-mod-updater published by Truth. Access
+from other software is not allowed. Access may be rate-limited, changed, or
+withdrawn at any time.
+
 ## Assumptions
 
 - Close Minecraft before `apply` or a loader upgrade

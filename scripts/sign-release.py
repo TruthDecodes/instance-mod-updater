@@ -8,7 +8,9 @@ Pass the 32-byte seed as 64 hex characters via --key-file or IMU_UPDATE_SIGNING_
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
+import secrets
 import sys
 import zipfile
 from pathlib import Path
@@ -41,6 +43,22 @@ def _load_seed(key_file: Path | None) -> bytes:
     if len(seed) != 32:
         raise SystemExit(f"{key_file} must contain 32 bytes hex")
     return seed
+
+
+def write_release_mark(path: Path, mark: str | None = None) -> str:
+    """Write the per-release marker into a staging copy. Returns sha256 hex.
+
+    The plaintext stays out of git and out of this script's stdout.
+    """
+    value = mark if mark is not None else secrets.token_urlsafe(32)
+    if len(value) < 32:
+        raise SystemExit("release mark too short")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        '"""Release-only marker. Left empty in git."""\n\nMARK = %r\n' % (value,),
+        encoding="utf-8",
+    )
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def _write_zip(src: Path, dest: Path, version: str) -> None:
@@ -100,6 +118,8 @@ def main(argv: list[str] | None = None) -> int:
     copied = copy_code_tree(args.root.resolve(), staging)
     if not copied:
         raise SystemExit("no allowlisted files to pack")
+    mark_path = staging / "instance_mod_updater" / "_release_mark.py"
+    digest = write_release_mark(mark_path)
 
     zip_path = out_dir / f"instance-mod-updater-{args.version}.zip"
     _write_zip(staging, zip_path, args.version)
@@ -109,6 +129,7 @@ def main(argv: list[str] | None = None) -> int:
     sig_path.write_text(sig.hex() + "\n", encoding="ascii")
     print(zip_path)
     print(sig_path)
+    print(digest)
     return 0
 
 
