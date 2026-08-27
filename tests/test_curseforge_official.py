@@ -2,6 +2,7 @@ import copy
 import json
 import os
 import re
+import tempfile
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
@@ -11,6 +12,7 @@ from urllib.parse import parse_qs, urlparse
 from instance_mod_updater import curseforge, httputil
 from instance_mod_updater.curseforge import (
     API_BASE,
+    ENROLL_PATH,
     PUBLISHER_ORIGIN,
     fingerprint_lookup,
     list_cf_files,
@@ -20,6 +22,7 @@ from instance_mod_updater.curseforge import (
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 OFFICIAL_DOWNLOAD = "https://example.invalid/official-file.jar"
+INSTALL_TOKEN = "test-install-token"
 
 
 def _load_fixture(name: str):
@@ -41,11 +44,24 @@ def _no_cf_key():
 class OfficialAdapterTests(unittest.TestCase):
     def setUp(self):
         curseforge._allow_mod_distribution.clear()
+        curseforge._reset_publisher_token_cache()
         self.mod_fixture = "cf_mod.json"
         pace = patch.object(curseforge, "_pace")
         pace.start()
         self.addCleanup(pace.stop)
         self.addCleanup(curseforge._allow_mod_distribution.clear)
+        self.addCleanup(curseforge._reset_publisher_token_cache)
+        token_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(token_dir.cleanup)
+        self.token_path = Path(token_dir.name) / "publisher-client.token"
+        self.token_path.write_text(INSTALL_TOKEN + "\n", encoding="utf-8")
+        env = patch.dict(
+            os.environ,
+            {"IMU_PUBLISHER_CLIENT_TOKEN_FILE": str(self.token_path)},
+            clear=False,
+        )
+        env.start()
+        self.addCleanup(env.stop)
 
     def _get_json(self, url, **_kwargs):
         path = urlparse(url).path.rstrip("/")
@@ -84,6 +100,16 @@ class OfficialAdapterTests(unittest.TestCase):
         self.assertNotIn(unique, dumped)
         self.assertNotIn("x-api-key", dumped)
 
+    def _assert_install_token_header(self, mock) -> None:
+        for call in mock.call_args_list:
+            url = call.args[0]
+            headers = call.kwargs.get("headers") or {}
+            if ENROLL_PATH in urlparse(url).path:
+                self.assertNotIn("Authorization", headers)
+                continue
+            self.assertEqual(headers.get("Authorization"), f"Bearer {INSTALL_TOKEN}")
+            self.assertNotIn("x-api-key", {str(k).lower() for k in headers})
+
     @patch("instance_mod_updater.httputil.post_json")
     @patch("instance_mod_updater.httputil.get_json")
     def test_no_local_key_uses_publisher_origin(self, get_json, post_json):
@@ -119,9 +145,13 @@ class OfficialAdapterTests(unittest.TestCase):
         self._assert_origin(post_json, PUBLISHER_ORIGIN)
         self._assert_no_api_key_header(get_json)
         self._assert_no_api_key_header(post_json)
+        self._assert_install_token_header(get_json)
+        self._assert_install_token_header(post_json)
         self._assert_no_unique_key(
             {"files": files, "url": spec.url, "hits": hits}, unique
         )
+        visible = json.dumps({"files": files, "url": spec.url, "hits": hits})
+        self.assertNotIn(INSTALL_TOKEN, visible)
         parsed_origin = urlparse(PUBLISHER_ORIGIN)
         self.assertEqual(parsed_origin.scheme, "https")
         self.assertTrue(parsed_origin.hostname)
@@ -221,6 +251,94 @@ class OfficialAdapterTests(unittest.TestCase):
             self.assertEqual(call.kwargs.get("ua"), httputil.DEFAULT_UA)
         self._assert_origin(post_json, API_BASE)
         self._assert_api_key_header(post_json, "test-key")
+
+    @patch("instance_mod_updater.httputil.post_json")
+    @patch("instance_mod_updater.httputil.get_json")
+    def test_publisher_origin_enrolls_when_token_missing(self, get_json, post_json):
+        self.token_path.unlink()
+        curseforge._reset_publisher_token_cache()
+        issued = "enrolled-token-not-in-zip"
+
+        def _post(url, body, **kwargs):
+            path = urlparse(url).path.rstrip("/")
+            if path == ENROLL_PATH:
+                return {"token": issued, "token_type": "bearer"}
+            return {
+                "data": {
+                    "exactMatches": [
+                        {
+                            "file": {
+                                "id": 99,
+                                "modId": 1,
+                                "fileFingerprint": 1,
+                                "fileName": "x.jar",
+                            }
+                        }
+                    ]
+                }
+            }
+
+        get_json.side_effect = self._get_json
+        post_json.side_effect = _post
+        with _no_cf_key():
+            files = list_cf_files("1", "1.20.1")
+            hits = fingerprint_lookup([1])
+        self.assertTrue(files)
+        self.assertTrue(hits)
+        enrolls = [
+            call.args[0]
+            for call in post_json.call_args_list
+            if urlparse(call.args[0]).path.rstrip("/") == ENROLL_PATH
+        ]
+        self.assertTrue(enrolls)
+        self.assertEqual(self.token_path.read_text(encoding="utf-8").strip(), issued)
+        auth_headers = []
+        for call in list(get_json.call_args_list) + list(post_json.call_args_list):
+            path = urlparse(call.args[0]).path.rstrip("/")
+            if path == ENROLL_PATH:
+                headers = call.kwargs.get("headers") or {}
+                self.assertFalse(headers.get("Authorization"))
+                continue
+            if path.startswith("/v1/"):
+                headers = call.kwargs.get("headers") or {}
+                auth_headers.append(headers.get("Authorization"))
+        self.assertTrue(auth_headers)
+        self.assertTrue(all(h == f"Bearer {issued}" for h in auth_headers))
+        self.assertNotIn(issued, json.dumps({"files": files, "hits": hits}))
+
+    @patch("instance_mod_updater.httputil.get_json")
+    def test_publisher_origin_reenrolls_on_unauthorized(self, get_json):
+        issued = "rotated-install-token"
+        calls = {"n": 0}
+
+        def _get(url, **kwargs):
+            path = urlparse(url).path.rstrip("/")
+            if path.endswith("/files"):
+                calls["n"] += 1
+                if calls["n"] == 1:
+                    raise httputil.HttpUnauthorized()
+            return self._get_json(url, **kwargs)
+
+        def _post(url, body, **kwargs):
+            path = urlparse(url).path.rstrip("/")
+            if path == ENROLL_PATH:
+                return {"token": issued, "token_type": "bearer"}
+            self.fail(f"unexpected post_json url: {url}")
+
+        get_json.side_effect = _get
+        with patch("instance_mod_updater.httputil.post_json", side_effect=_post):
+            with _no_cf_key():
+                files = list_cf_files("1", "1.20.1")
+        self.assertTrue(files)
+        self.assertEqual(self.token_path.read_text(encoding="utf-8").strip(), issued)
+        auths = [
+            (call.kwargs.get("headers") or {}).get("Authorization")
+            for call in get_json.call_args_list
+            if urlparse(call.args[0]).path.rstrip("/").endswith("/files")
+        ]
+        self.assertGreaterEqual(len(auths), 2)
+        self.assertEqual(auths[0], f"Bearer {INSTALL_TOKEN}")
+        self.assertEqual(auths[-1], f"Bearer {issued}")
 
 
 if __name__ == "__main__":

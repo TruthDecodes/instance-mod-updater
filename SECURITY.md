@@ -43,7 +43,12 @@ A CurseForge Core API key may be supplied at run time if it is yours
 (`CURSEFORGE_API_KEY` or `CF_API_KEY`). Prefer the environment: `--cf-api-key`
 is visible on the process command line. Without a local unique key, the
 published app still performs those Core operations via the publisher origin.
-Keep any key in your environment, not in a file that gets copied or committed.
+The zip does not contain a credential for that origin. On first use the app
+creates a machine-local install token (outside the install root) so the
+publisher can rate-limit and revoke a noisy install. That token is not a
+CurseForge key and is not proof that the caller is this app.
+Keep any unique CurseForge key in your environment, not in a file that gets
+copied or committed.
 
 ## Assumptions
 

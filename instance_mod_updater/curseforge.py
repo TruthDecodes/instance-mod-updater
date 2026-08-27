@@ -23,6 +23,7 @@ UA = httputil.DEFAULT_UA
 API_BASE = "https://api.curseforge.com"
 # Public HTTPS origin for Core-shaped ops when no local unique application key.
 PUBLISHER_ORIGIN = "https://truthimu.duckdns.org"
+ENROLL_PATH = "/imu/enroll"
 MC_GAME_ID = 432
 # Whitespace bytes CF strips before murmur2 fingerprinting
 _CF_STRIP = {9, 10, 13, 32}
@@ -33,6 +34,8 @@ _INDEX_CAP = 10000
 # allowModDistribution by project id; process memory only
 _allow_mod_distribution: dict[str, Any] = {}
 _allow_mod_lock = threading.Lock()
+_publisher_token_lock = threading.Lock()
+_publisher_token: str | None = None
 
 
 def _pace() -> None:
@@ -45,11 +48,118 @@ def _core_origin(api_key: str | None) -> str:
     return PUBLISHER_ORIGIN.rstrip("/")
 
 
+def publisher_client_token_path() -> Path:
+    """Machine-local token file. Not in the Release zip or the install root."""
+    raw = (os.environ.get("IMU_PUBLISHER_CLIENT_TOKEN_FILE") or "").strip()
+    if raw:
+        return Path(raw)
+    if os.name == "nt":
+        base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
+        return Path(base) / "instance-mod-updater" / "publisher-client.token"
+    xdg = (os.environ.get("XDG_DATA_HOME") or "").strip()
+    root = Path(xdg) if xdg else Path.home() / ".local" / "share"
+    return root / "instance-mod-updater" / "publisher-client.token"
+
+
+def _reset_publisher_token_cache() -> None:
+    global _publisher_token
+    with _publisher_token_lock:
+        _publisher_token = None
+
+
+def _read_stored_publisher_token() -> str | None:
+    path = publisher_client_token_path()
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    line = text.splitlines()[0].strip() if text.strip() else ""
+    return line or None
+
+
+def _write_publisher_token(token: str) -> None:
+    path = publisher_client_token_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(token + "\n", encoding="utf-8")
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
+def _enroll_publisher_token(origin: str) -> str | None:
+    data = httputil.post_json(f"{origin.rstrip('/')}{ENROLL_PATH}", {})
+    if not isinstance(data, dict):
+        return None
+    token = str(data.get("token") or "").strip()
+    return token or None
+
+
+def _publisher_bearer(origin: str, *, force: bool = False) -> str | None:
+    global _publisher_token
+    with _publisher_token_lock:
+        if not force and _publisher_token:
+            return _publisher_token
+        if not force:
+            stored = _read_stored_publisher_token()
+            if stored:
+                _publisher_token = stored
+                return stored
+        token = _enroll_publisher_token(origin)
+        if not token:
+            _publisher_token = None
+            return None
+        _write_publisher_token(token)
+        _publisher_token = token
+        return token
+
+
 def _request_headers(api_key: str | None) -> dict[str, str] | None:
     key = (api_key or "").strip()
-    if not key:
+    if key:
+        return {"x-api-key": key}
+    token = _publisher_bearer(PUBLISHER_ORIGIN)
+    if not token:
         return None
-    return {"x-api-key": key}
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _cf_get_json(url: str, *, api_key: str | None) -> Any:
+    headers = _request_headers(api_key)
+    if api_key:
+        return httputil.get_json(url, ua=UA, headers=headers)
+    try:
+        return httputil.get_json(
+            url, ua=UA, headers=headers, on_unauthorized="raise"
+        )
+    except httputil.HttpUnauthorized:
+        _publisher_bearer(PUBLISHER_ORIGIN, force=True)
+        headers = _request_headers(None)
+        try:
+            return httputil.get_json(
+                url, ua=UA, headers=headers, on_unauthorized="raise"
+            )
+        except httputil.HttpUnauthorized:
+            return None
+
+
+def _cf_post_json(url: str, body: Any, *, api_key: str | None) -> Any:
+    headers = _request_headers(api_key)
+    if api_key:
+        return httputil.post_json(url, body, ua=UA, headers=headers)
+    try:
+        return httputil.post_json(
+            url, body, ua=UA, headers=headers, on_unauthorized="raise"
+        )
+    except httputil.HttpUnauthorized:
+        _publisher_bearer(PUBLISHER_ORIGIN, force=True)
+        headers = _request_headers(None)
+        try:
+            return httputil.post_json(
+                url, body, ua=UA, headers=headers, on_unauthorized="raise"
+            )
+        except httputil.HttpUnauthorized:
+            return None
 
 
 def resolve_api_key(explicit: str | None = None) -> str | None:
@@ -126,20 +236,18 @@ def fingerprint_lookup(
     origin = _core_origin(key)
     uniq = sorted(set(fps))
     _pace()
-    data = httputil.post_json(
+    data = _cf_post_json(
         f"{origin}/v1/fingerprints/{game_id}",
         {"fingerprints": uniq},
-        ua=UA,
-        headers=_request_headers(key),
+        api_key=key,
     )
     if not data:
         # Fallback without game id (same body)
         _pace()
-        data = httputil.post_json(
+        data = _cf_post_json(
             f"{origin}/v1/fingerprints",
             {"fingerprints": uniq},
-            ua=UA,
-            headers=_request_headers(key),
+            api_key=key,
         )
     if not data or not isinstance(data, dict):
         return {}
@@ -210,7 +318,7 @@ def list_cf_files_official(
             q["modLoaderType"] = str(_NEOFORGE_LOADER_TYPE)
         url = f"{origin}/v1/mods/{project_id}/files?{urllib.parse.urlencode(q)}"
         _pace()
-        data = httputil.get_json(url, ua=UA, headers=_request_headers(key))
+        data = _cf_get_json(url, api_key=key)
         if not data:
             break
         chunk = _payload_data(data)
@@ -285,10 +393,9 @@ def _mod_allows_distribution(project_id: str, key: str | None) -> bool:
         if pid in _allow_mod_distribution:
             return _allow_mod_distribution[pid] is not False
     _pace()
-    data = httputil.get_json(
+    data = _cf_get_json(
         f"{_core_origin(key)}/v1/mods/{pid}",
-        ua=UA,
-        headers=_request_headers(key),
+        api_key=key,
     )
     allow: Any = None
     payload = _payload_data(data)
@@ -301,10 +408,9 @@ def _mod_allows_distribution(project_id: str, key: str | None) -> bool:
 
 def _get_mod_file(project_id: str, file_id: int, key: str | None) -> dict | None:
     _pace()
-    data = httputil.get_json(
+    data = _cf_get_json(
         f"{_core_origin(key)}/v1/mods/{project_id}/files/{file_id}",
-        ua=UA,
-        headers=_request_headers(key),
+        api_key=key,
     )
     payload = _payload_data(data)
     return payload if isinstance(payload, dict) else None
@@ -327,10 +433,9 @@ def file_download_url(project_id: str, file_id: int) -> str | None:
     """GET /v1/mods/{modId}/files/{fileId}/download-url. None if no URL."""
     key = resolve_api_key()
     _pace()
-    data = httputil.get_json(
+    data = _cf_get_json(
         f"{_core_origin(key)}/v1/mods/{project_id}/files/{file_id}/download-url",
-        ua=UA,
-        headers=_request_headers(key),
+        api_key=key,
     )
     if data is None:
         return None

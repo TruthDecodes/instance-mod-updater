@@ -20,6 +20,10 @@ T = TypeVar("T")
 R = TypeVar("R")
 
 
+class HttpUnauthorized(Exception):
+    """HTTP 401 from the origin. Publisher path may re-enroll."""
+
+
 class RateLimiter:
     """Thread-safe minimum spacing between API calls (shared across workers)."""
 
@@ -82,6 +86,7 @@ def get_json(
     retries: int = 3,
     label: str | None = None,
     headers: dict[str, str] | None = None,
+    on_unauthorized: str = "none",
 ) -> Any | None:
     last_err: Exception | None = None
     for attempt in range(retries):
@@ -95,6 +100,8 @@ def get_json(
                 return json.loads(raw.decode())
         except urllib.error.HTTPError as e:
             last_err = e
+            if e.code == 401 and on_unauthorized == "raise":
+                raise HttpUnauthorized() from e
             if e.code == 404:
                 return None
             if e.code == 429:
@@ -119,6 +126,7 @@ def post_json(
     ua: str = DEFAULT_UA,
     timeout: float = 60,
     headers: dict[str, str] | None = None,
+    on_unauthorized: str = "none",
 ) -> Any | None:
     data = json.dumps(body).encode()
     hdrs = {
@@ -139,9 +147,18 @@ def post_json(
             # batch responses are small; no progress bar
             return json.loads(resp.read().decode())
     except urllib.error.HTTPError as e:
+        if e.code == 401 and on_unauthorized == "raise":
+            raise HttpUnauthorized() from e
         if e.code == 429:
             time.sleep(2.5)
-            return post_json(url, body, ua=ua, timeout=timeout, headers=headers)
+            return post_json(
+                url,
+                body,
+                ua=ua,
+                timeout=timeout,
+                headers=headers,
+                on_unauthorized=on_unauthorized,
+            )
         return None
 
 
