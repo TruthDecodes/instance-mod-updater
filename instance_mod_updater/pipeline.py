@@ -631,8 +631,8 @@ def check_updates(
             _log(
                 "No pack id/versionId on instance; pass --pack-id and --version-id "
                 "(or a pack JSON) so pack rows can supply CurseForge project ids. "
-                "Modrinth still runs for hash hits. CurseForge file lists still need "
-                "a Core API key.",
+                "Modrinth still runs for hash hits. CurseForge file lists still run "
+                "when a project id is known.",
                 log,
             )
 
@@ -1554,8 +1554,8 @@ def check_updates(
         "",
         "These jars were not confirmed current on Modrinth or CurseForge. "
         "After a missing Modrinth hash and no pack CurseForge project id, the tool "
-        "tries exact Modrinth GET /project/{modid-or-stem} (no search), then optional "
-        "CurseForge fingerprint when an API key is set. Matching the pack pin is not "
+        "tries exact Modrinth GET /project/{modid-or-stem} (no search), then "
+        "CurseForge fingerprint. Matching the pack pin is not "
         "\"up to date.\"",
         "",
     ]

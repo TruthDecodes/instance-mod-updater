@@ -15,8 +15,8 @@ I may take a while to reply. There is no paid bounty.
 On a Windows machine it can:
 
 - Read FTB App instance files under `%LOCALAPPDATA%\.ftba`
-- Download jars from Modrinth, the official CurseForge Core API download URL
-  (when an approved key is set), and FTB pack file URLs
+- Download jars from Modrinth, the official CurseForge Core API download URL,
+  and FTB pack file URLs
 - Write into the instance `mods` folder after a backup
 - Install a NeoForge client into the FTB App `bin` folder
 - Replace its own app files from a **signed** GitHub Release of
@@ -39,11 +39,11 @@ Skip a launch with `--no-self-update` or
 
 Do not put API keys in this repository.
 
-A CurseForge Core API key may be supplied at run time
+A CurseForge Core API key may be supplied at run time if it is yours
 (`CURSEFORGE_API_KEY` or `CF_API_KEY`). Prefer the environment: `--cf-api-key`
-is visible on the process command line. CurseForge file lists, download URLs,
-and fingerprint lookup need that key. Keep it in your environment, not in a
-file that gets copied or committed.
+is visible on the process command line. Without a local unique key, the
+published app still performs those Core operations via the publisher origin.
+Keep any key in your environment, not in a file that gets copied or committed.
 
 ## Assumptions
 

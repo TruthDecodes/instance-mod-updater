@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.5 - 2026-08-27
+
+- With no local unique CurseForge key, file list, download URL, and fingerprint still use Core `/v1/` paths via `https://truthimu.duckdns.org`. Those calls do not send `x-api-key`.
+- A local `CURSEFORGE_API_KEY` / `CF_API_KEY` still talks to `api.curseforge.com`.
+- README Start here for zip install. CurseForge is no longer described as uncheckable without a local unique key.
+
 ## 0.1.4 - 2026-08-14
 
 - `downloaded` is one color (magenta) on the count, the `[downloaded]` tag, and the status tokens. Not cyan. Not the default white.
