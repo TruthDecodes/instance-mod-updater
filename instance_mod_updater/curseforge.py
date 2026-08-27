@@ -21,6 +21,8 @@ from .versions import (
 RT_RELEASE, RT_BETA, RT_ALPHA = 1, 2, 3
 UA = httputil.DEFAULT_UA
 API_BASE = "https://api.curseforge.com"
+# Public HTTPS origin for Core-shaped ops when no local unique application key.
+PUBLISHER_ORIGIN = "https://truthimu.duckdns.org"
 MC_GAME_ID = 432
 # Whitespace bytes CF strips before murmur2 fingerprinting
 _CF_STRIP = {9, 10, 13, 32}
@@ -37,7 +39,16 @@ def _pace() -> None:
     httputil.CURSEFORGE_LIMITER.wait()
 
 
-def _auth_headers(key: str) -> dict[str, str]:
+def _core_origin(api_key: str | None) -> str:
+    if api_key:
+        return API_BASE
+    return PUBLISHER_ORIGIN.rstrip("/")
+
+
+def _request_headers(api_key: str | None) -> dict[str, str] | None:
+    key = (api_key or "").strip()
+    if not key:
+        return None
     return {"x-api-key": key}
 
 
@@ -98,34 +109,37 @@ def fingerprint_file(path: Path | str) -> int:
 def fingerprint_lookup(
     fingerprints: list[int],
     *,
-    api_key: str,
+    api_key: str | None = None,
     game_id: int = MC_GAME_ID,
 ) -> dict[int, dict]:
     """
     Official fingerprint match: POST /v1/fingerprints/{gameId}.
 
     Returns map fingerprint -> match row (includes file.modId, file.id, …).
-    No search endpoints.
+    No search endpoints. Local unique key talks to Core API; otherwise the
+    publisher origin.
     """
     fps = [int(f) & 0xFFFFFFFF for f in fingerprints if f is not None]
-    if not fps or not api_key:
+    if not fps:
         return {}
+    key = resolve_api_key(api_key)
+    origin = _core_origin(key)
     uniq = sorted(set(fps))
     _pace()
     data = httputil.post_json(
-        f"{API_BASE}/v1/fingerprints/{game_id}",
+        f"{origin}/v1/fingerprints/{game_id}",
         {"fingerprints": uniq},
         ua=UA,
-        headers=_auth_headers(api_key),
+        headers=_request_headers(key),
     )
     if not data:
         # Fallback without game id (same body)
         _pace()
         data = httputil.post_json(
-            f"{API_BASE}/v1/fingerprints",
+            f"{origin}/v1/fingerprints",
             {"fingerprints": uniq},
             ua=UA,
-            headers=_auth_headers(api_key),
+            headers=_request_headers(key),
         )
     if not data or not isinstance(data, dict):
         return {}
@@ -174,13 +188,13 @@ def list_cf_files_official(
     project_id: str,
     game: str,
     *,
-    api_key: str,
+    api_key: str | None = None,
     loader: str | None = None,
     max_pages: int = 5,
 ) -> list[dict]:
-    """GET /v1/mods/{modId}/files. Empty list when the key is missing."""
-    if not api_key:
-        return []
+    """GET /v1/mods/{modId}/files. Core API with a local unique key; else publisher origin."""
+    key = resolve_api_key(api_key)
+    origin = _core_origin(key)
     out: list[dict] = []
     index = 0
     page_size = _PAGE_SIZE
@@ -194,9 +208,9 @@ def list_cf_files_official(
         }
         if loader and str(loader).lower() == "neoforge":
             q["modLoaderType"] = str(_NEOFORGE_LOADER_TYPE)
-        url = f"{API_BASE}/v1/mods/{project_id}/files?{urllib.parse.urlencode(q)}"
+        url = f"{origin}/v1/mods/{project_id}/files?{urllib.parse.urlencode(q)}"
         _pace()
-        data = httputil.get_json(url, ua=UA, headers=_auth_headers(api_key))
+        data = httputil.get_json(url, ua=UA, headers=_request_headers(key))
         if not data:
             break
         chunk = _payload_data(data)
@@ -220,14 +234,11 @@ def list_cf_files(
     loader: str | None = None,
     max_pages: int = 5,
 ) -> list[dict]:
-    """Official file list when a key is set. Empty list when not."""
-    key = resolve_api_key()
-    if not key:
-        return []
+    """Official Core file list (local unique key or publisher origin)."""
     return list_cf_files_official(
         project_id,
         game,
-        api_key=key,
+        api_key=resolve_api_key(),
         loader=loader,
         max_pages=max_pages,
     )
@@ -267,7 +278,7 @@ def prefetch_files(
     return out
 
 
-def _mod_allows_distribution(project_id: str, key: str) -> bool:
+def _mod_allows_distribution(project_id: str, key: str | None) -> bool:
     """False only when allowModDistribution is explicitly False."""
     pid = str(project_id)
     with _allow_mod_lock:
@@ -275,9 +286,9 @@ def _mod_allows_distribution(project_id: str, key: str) -> bool:
             return _allow_mod_distribution[pid] is not False
     _pace()
     data = httputil.get_json(
-        f"{API_BASE}/v1/mods/{pid}",
+        f"{_core_origin(key)}/v1/mods/{pid}",
         ua=UA,
-        headers=_auth_headers(key),
+        headers=_request_headers(key),
     )
     allow: Any = None
     payload = _payload_data(data)
@@ -288,12 +299,12 @@ def _mod_allows_distribution(project_id: str, key: str) -> bool:
     return allow is not False
 
 
-def _get_mod_file(project_id: str, file_id: int, key: str) -> dict | None:
+def _get_mod_file(project_id: str, file_id: int, key: str | None) -> dict | None:
     _pace()
     data = httputil.get_json(
-        f"{API_BASE}/v1/mods/{project_id}/files/{file_id}",
+        f"{_core_origin(key)}/v1/mods/{project_id}/files/{file_id}",
         ua=UA,
-        headers=_auth_headers(key),
+        headers=_request_headers(key),
     )
     payload = _payload_data(data)
     return payload if isinstance(payload, dict) else None
@@ -313,15 +324,13 @@ class DownloadSpec:
 
 
 def file_download_url(project_id: str, file_id: int) -> str | None:
-    """GET /v1/mods/{modId}/files/{fileId}/download-url. None if no key / no URL."""
+    """GET /v1/mods/{modId}/files/{fileId}/download-url. None if no URL."""
     key = resolve_api_key()
-    if not key:
-        return None
     _pace()
     data = httputil.get_json(
-        f"{API_BASE}/v1/mods/{project_id}/files/{file_id}/download-url",
+        f"{_core_origin(key)}/v1/mods/{project_id}/files/{file_id}/download-url",
         ua=UA,
-        headers=_auth_headers(key),
+        headers=_request_headers(key),
     )
     if data is None:
         return None
@@ -329,11 +338,9 @@ def file_download_url(project_id: str, file_id: int) -> str | None:
 
 
 def resolve_download(project_id: str, file_id: int, filename: str) -> DownloadSpec:
-    """Official download-url when a key is set. url is None when not."""
+    """Official download-url (local unique key or publisher origin)."""
     empty = DownloadSpec(url=None, alt_url=None, ua=UA)
     key = resolve_api_key()
-    if not key:
-        return empty
     if not _mod_allows_distribution(project_id, key):
         return empty
     row = _get_mod_file(project_id, file_id, key)

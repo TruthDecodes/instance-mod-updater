@@ -491,11 +491,7 @@ def _satisfy_mandatory_deps(
                                 result.errors.append(
                                     {
                                         "jar": companion.jar_name,
-                                        "err": (
-                                            "cf_no_key"
-                                            if not curseforge.resolve_api_key()
-                                            else "cf_no_download_url"
-                                        ),
+                                        "err": "cf_no_download_url",
                                         "reason": "mandatory_dep",
                                     }
                                 )
@@ -753,9 +749,7 @@ def check_updates(
     if cascade_mods:
         _log(
             f"Resolve cascade: {len(cascade_mods)} jar(s) without MR hash / pack CF "
-            f"(exact Modrinth GET"
-            + ("; CF fingerprint on" if api_key else "; CF fingerprint off. No API key")
-            + ")...",
+            f"(exact Modrinth GET; CF fingerprint on)...",
             log,
         )
         # Prefetch unique exact slug candidates
@@ -832,8 +826,8 @@ def check_updates(
                 if m not in need_fp:
                     need_fp.append(m)
 
-        # Optional CF fingerprint for remaining jars
-        if need_fp and api_key:
+        # CF fingerprint for remaining jars (local unique key or publisher origin)
+        if need_fp:
             fp_values: list[int] = []
             jar_fp: dict[str, int] = {}
             for m in need_fp:
@@ -885,9 +879,6 @@ def check_updates(
                         new_cf, mc, loader=loader, max_workers=4
                     )
                     cf_files_cache.update(more)
-        elif need_fp and not api_key:
-            for m in need_fp:
-                cascade_notes.setdefault(m.jar_name, []).append("fingerprint_no_key")
 
     total_mods = len(mods)
     t_check = time.monotonic()
@@ -1151,8 +1142,6 @@ def check_updates(
                     or ["no_mr_hash", "no_pack_cf", "mr_project_not_found"]
                 )
                 notes = [c for c in notes if c not in ("mr_exact_hit", "fingerprint_hit")]
-                if not api_key and "fingerprint_no_key" not in notes:
-                    notes.append("fingerprint_no_key")
                 pack_matched = bool(entry) and not pack_manifest.has_curseforge_project(entry)
                 if pack_matched:
                     pack_sha = pack_manifest.pack_file_sha1(entry)
@@ -1290,8 +1279,7 @@ def check_updates(
                 files = curseforge.list_cf_files(project_id, mc, loader=loader)
                 cf_files_cache[project_id] = files
             if not files:
-                no_key = not curseforge.resolve_api_key()
-                codes = ["cf_no_key"] if no_key else ["no_files"]
+                codes = ["no_files"]
                 result.pack_only.append(
                     _uncheckable_row(
                         jar=mod.jar_name,
@@ -1336,11 +1324,7 @@ def check_updates(
             new_id = int(upd["id"])
             got = curseforge.resolve_download(project_id, new_id, new_name)
             if not got.url:
-                codes = (
-                    ["cf_no_key"]
-                    if not curseforge.resolve_api_key()
-                    else ["cf_no_download_url"]
-                )
+                codes = ["cf_no_download_url"]
                 result.pack_only.append(
                     _uncheckable_row(
                         jar=mod.jar_name,
@@ -1487,11 +1471,12 @@ def check_updates(
         "pack_neoforge": result.pack_neoforge,
         "policy": (
             "Prefer release for this MC+loader. Beta/alpha only when that is the only channel. "
-            "CurseForge uses the official Core API when CURSEFORGE_API_KEY / --cf-api-key is "
-            "set (file list, download URL, optional fingerprint). Project ids may come from "
+            "CurseForge uses the official Core API (file list, download URL, fingerprint). "
+            "A local unique application key talks to api.curseforge.com; otherwise the "
+            "published app uses the publisher origin. Project ids may come from "
             "the FTB pack JSON or a fingerprint hit. current = checked Modrinth/CurseForge "
             "and already on the newest eligible build. pack_only / uncheckable = latest was "
-            "not checked: cascade was exact Modrinth GET by modid/stem, then optional CF "
+            "not checked: cascade was exact Modrinth GET by modid/stem, then CF "
             "fingerprint; failures carry reason codes (not free-text search). Matching the "
             "pack pin is never treated as up to date. Optional pack re-sync when local SHA "
             "differs restores the pack file only. After per-jar picks, mandatory inter-mod "
@@ -1500,7 +1485,7 @@ def check_updates(
         ),
         "cascade": (
             "no_mr_hash + no_pack_cf → exact Modrinth GET /project/{modid|stem} → "
-            "optional CF fingerprint (API key) → uncheckable with why"
+            "CF fingerprint → uncheckable with why"
         ),
     }
     report_path.write_text(json.dumps(report_obj, indent=2), encoding="utf-8")
