@@ -1,6 +1,6 @@
 # Mod updater for FTB App instances
 
-**Unfinished.** Version 0.1.4. Personal snapshot, not a release. No support.
+**Unfinished.** Version 0.1.5. Personal snapshot, not a release. No support.
 Do not treat it as ready for anyone else. Not an official Feed the Beast product.
 
 Update **mods on an existing FTB App instance** (your real modlist stays where it is).
@@ -8,10 +8,51 @@ Does **not** migrate you to Prism or rebuild a pack.
 
 License: [MIT](LICENSE). Copyright 2026 Truth. Security: [SECURITY.md](SECURITY.md).
 
+## Start here
+
+You can run the updater without reading further. The defaults are already set.
+
+### Install
+
+1. Download `instance-mod-updater-x.y.z.zip` from [Releases](https://github.com/TruthDecodes/instance-mod-updater/releases/latest). Not the green **Code** zip (`main` is unsigned).
+2. Put the files so `run.cmd` is at `C:\Users\Public\instance-mod-updater\run.cmd` (the zip has a version folder; move those files up if needed).
+3. One time, in that folder:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\fetch-runtime.ps1
+```
+
+Git clone or copy a tree: [Install](#install).
+
+### Update mods
+
+Close Minecraft.
+
+```powershell
+cd C:\Users\Public\instance-mod-updater
+.\run.cmd list
+.\run.cmd all -i "name from list"
+```
+
+Use `run.cmd`. It refreshes this tool from a signed GitHub Release, then checks mods, applies updates, and upgrades NeoForge if the mods need it. Pack ids come from the instance when FTB already stored them.
+
+If FTB App offers to reinstall the pack loader, decline.
+
+Dry run, report-then-apply, or explicit pack ids: [Step by step](#step-by-step) · [Pack metadata](#pack-metadata-ftb).
+CurseForge file lists, download URLs, and fingerprints run without a local unique key. If you hold your own approved Core API key, you can still inject it: [Requirements](#requirements).
+
+### Safety
+
+Close the game before apply or a loader upgrade. Replaced jars and `instance.json` are backed up. Apply stops if jars are still locked.
+
+[Safety](#safety) · [After loader upgrade](#after-loader-upgrade) · [Policy](#policy) · [Commands](#commands)
+
+## Sources
+
 | Source | Auth |
 | --- | --- |
 | **Modrinth** | Public API (jar SHA1 identity; exact `GET /project/{modid\|stem}` when hash misses) |
-| **CurseForge** | Official [Core API](https://docs.curseforge.com/rest-api/) (`api.curseforge.com` + `x-api-key`). File list, download URL, and fingerprint match. Needs an approved key (`CURSEFORGE_API_KEY` or `CF_API_KEY`; `--cf-api-key` also works but shows up on the process command line). Without a key, CurseForge-only jars are reported uncheckable. Project ids may come from the FTB pack manifest or from a fingerprint hit. No CurseForge search. |
+| **CurseForge** | Official [Core API](https://docs.curseforge.com/rest-api/). File list, download URL, and fingerprint match. With no local unique key, those Core `/v1/` calls go to `https://truthimu.duckdns.org` and do not send `x-api-key`. If you inject your own approved key (`CURSEFORGE_API_KEY` or `CF_API_KEY`; `--cf-api-key` also works but shows up on the process command line), those calls go to `api.curseforge.com` with `x-api-key`. Project ids may come from the FTB pack manifest or from a fingerprint hit. No CurseForge search. |
 | **NeoForge** | Official Maven installer into FTB App `bin\` |
 
 ## Requirements
@@ -20,18 +61,19 @@ License: [MIT](LICENSE). Copyright 2026 Truth. Security: [SECURITY.md](SECURITY.
 - FTB App installed (`%LOCALAPPDATA%\.ftba`)
 - Python 3.11+ **or** bundled embeddable CPython under `runtime\python\`
 - Close Minecraft before `apply` / loader upgrade
-- CurseForge Core API key if you want CurseForge file lists, downloads, or fingerprint resolve
+- Optional: your own approved CurseForge Core API key if you want those Core calls to go to `api.curseforge.com` as you (`CURSEFORGE_API_KEY` or `CF_API_KEY`)
 
 No `pip` packages. Stdlib only.
 
 ## Install
 
+Zip install is in [Start here](#start-here). The archive unpacks as `instance-mod-updater-x.y.z\`; `run.cmd` must sit in `C:\Users\Public\instance-mod-updater\`.
+
+Git clone (same folder, then the same one-time runtime):
+
 ```powershell
-# clone somewhere the desktop user can run
 git clone https://github.com/TruthDecodes/instance-mod-updater.git C:\Users\Public\instance-mod-updater
 cd C:\Users\Public\instance-mod-updater
-
-# one-time: embeddable CPython (avoids Microsoft Store stub)
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\fetch-runtime.ps1
 ```
 
@@ -39,6 +81,8 @@ Or copy the tree and run `scripts\fetch-runtime.ps1` the same way.
 
 ## Update the tool (from Public)
 **tldr; The tool self-updates upon running it.**
+
+`run.cmd` already does this before each command. Use this section only if you want the details.
 
 The live install is `%PUBLIC%\instance-mod-updater`. That folder is also the work root (jars, reports, manifests). Updating must not wipe those.
 
@@ -70,7 +114,9 @@ Updates come only from a GitHub Release zip that verifies with the Ed25519 publi
 Skip always: `set INSTANCE_UPDATER_NO_SELF_UPDATE=1`
 (`FTB_NO_SELF_UPDATE` is still honored as an alias.)
 
-## Quick start
+## Step by step
+
+Daily use is [Start here](#start-here). This is the longer command list.
 
 Change to the directory you placed the files in.
 Run `.\run.cmd` to see on-screen help.
@@ -95,7 +141,7 @@ If execution policy blocks `.ps1` only:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\run.ps1 list
 ```
 
-Step by step:
+Check, then apply:
 
 ```powershell
 .\run.cmd check -i "ftb unstable 6" --pack-id 132 --version-id 100392
@@ -116,7 +162,7 @@ Dry run (no apply / no loader write):
 
 Matching order for a jar: exact pack SHA1 → exact pack filename → same **modid** as a pack mod → same **jar product stem** (name with loader/version stripped). That last path is how an instance that already moved past the pack pin still finds the pack row.
 
-Listing those mods on CurseForge still needs an approved Core API key.
+Those mods list on CurseForge through the same Core path as other CF jars (publisher origin, or your own approved key if you set one).
 
 | Pack | pack-id | version-id (example) |
 | --- | --- | --- |
@@ -140,14 +186,14 @@ https://api.feed-the-beast.com/v1/modpacks/public/modpack/{packId}/{versionId}
 - NeoForge upgrade uses the latest **matching MC line** (e.g. `26.1.2.x` for MC `26.1.2`, not `26.2.x`) when mod dependency floors require it.
 - NeoForge floor is taken from **neoforge** dependency ranges in mods.toml, not FML `loaderVersion` (e.g. `[63,)`).
 - **Status meanings (layman):**
-  - **`current`**: we looked up Modrinth and/or CurseForge and you already have the newest eligible build for this MC+loader. Safe to read as “up to date on a public listing.” CurseForge lookup only runs when a Core API key is set.
+  - **`current`**: we looked up Modrinth and/or CurseForge and you already have the newest eligible build for this MC+loader. Safe to read as “up to date on a public listing.” A local unique CurseForge key is not required for that lookup.
   - **`uncheckable` / `pack_only`**: latest was **not** checked. Structured reason codes + short why (CLI + report). Matching the pack pin is **never** “up to date.”
   - **`no_source`**: no Modrinth hash, no pack row, and cascade still failed (same style of reasons).
   - **`errors`**: problems found after the scan. Not a count of failed downloads. Typical: a required companion is not a separate jar and is not bundled in the parent (JarJar / extra `[[mods]]`); or a companion is present but no matching update was found. The console lists every error in red. Libraries the game already loads from inside a parent jar are not errors.
 - **Resolve cascade** (when jar SHA1 is not on Modrinth **and** the pack row has no CurseForge project id):
   1. Exact Modrinth `GET /project/{id-or-slug}` using installed **modid** and jar **product stem** only. **No** free-text Modrinth search.
-  2. CurseForge **fingerprint** (`hashes.cfMurmur` or local jar murmur) only if `CURSEFORGE_API_KEY` / `CF_API_KEY` / `--cf-api-key` is set. Official `POST /v1/fingerprints/{gameId}` only. **No** CurseForge search. Without a key, those jars report `fingerprint_no_key` (and CF file lists are not fetched). That is not a failure of the check command.
-  3. If still unresolved → **uncheckable** with codes such as `mr_project_not_found`, `mr_no_eligible_version`, `fingerprint_no_key`, `fingerprint_miss`, `cf_no_key`, `ftb_private_blob`.
+  2. CurseForge **fingerprint** (`hashes.cfMurmur` or local jar murmur). Official `POST /v1/fingerprints/{gameId}` only. **No** CurseForge search. A local unique key is not required.
+  3. If still unresolved → **uncheckable** with codes such as `mr_project_not_found`, `mr_no_eligible_version`, `fingerprint_miss`, `ftb_private_blob`.
 - **True FTB-only blobs** (e.g. `ftb-auxilium-neoforge-*.jar`): cascade finds no public project → `ftb_private_blob` / pack pin match; optional re-sync from the pack file URL when local SHA differs (`pack_ftb_only_pin_refresh`). Never counted under `current`.
 
 ## Commands
@@ -156,7 +202,7 @@ https://api.feed-the-beast.com/v1/modpacks/public/modpack/{packId}/{versionId}
 | --- | --- |
 | `list` | List FTB instances |
 | `self-update` | Refresh app code from a signed GitHub Release (same as `deploy.cmd`); does not touch work files |
-| `check` | Hash jars → Modrinth + (if a CF key is set) official CurseForge file lists and optional fingerprint cascade; then mandatory inter-mod `versionRange` on staged/remaining jars; stage jars + `manifest.json` + reports. Status: `upd` planned, `dl` transferred, `cached` already in work/jars; `uncheckable` with why |
+| `check` | Hash jars → Modrinth + official CurseForge file lists and fingerprint cascade; then mandatory inter-mod `versionRange` on staged/remaining jars; stage jars + `manifest.json` + reports. Status: `upd` planned, `dl` transferred, `cached` already in work/jars; `uncheckable` with why |
 | `apply` | Backup old jars, copy staged jars into instance `mods\` (refuses if jars locked) |
 | `upgrade-loader` | NeoForge client install into `.ftba\bin`, retarget `instance.json` |
 | `all` | check → apply → upgrade-loader if needed |
