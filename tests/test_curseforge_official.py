@@ -122,9 +122,13 @@ class OfficialAdapterTests(unittest.TestCase):
         self._assert_no_unique_key(
             {"files": files, "url": spec.url, "hits": hits}, unique
         )
+        parsed_origin = urlparse(PUBLISHER_ORIGIN)
+        self.assertEqual(parsed_origin.scheme, "https")
+        self.assertTrue(parsed_origin.hostname)
         self.assertFalse(PUBLISHER_ORIGIN.startswith("http://192."))
-        self.assertNotIn("source", urlparse(PUBLISHER_ORIGIN).hostname or "")
+        self.assertNotIn("source", parsed_origin.hostname or "")
         self.assertNotIn("localhost", PUBLISHER_ORIGIN)
+        self.assertFalse((parsed_origin.hostname or "").endswith(".local"))
 
     @patch("instance_mod_updater.httputil.get_json")
     def test_no_local_key_same_shapes_as_core(self, get_json):

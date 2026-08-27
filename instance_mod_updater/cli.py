@@ -399,9 +399,8 @@ def build_parser() -> argparse.ArgumentParser:
         description=(
             "Unfinished experimental tool (not a release). Not an official Feed the Beast "
             "product. Update mods on an existing FTB App instance (pre-existing modlist). "
-            "Modrinth public API. CurseForge official Core API when a key is set "
-            "(file list, download URL, optional fingerprint). Optional NeoForge client "
-            "install into FTB App bin."
+            "Modrinth public API. CurseForge official Core API (file list, download URL, "
+            "fingerprint). Optional NeoForge client install into FTB App bin."
         ),
     )
     p.add_argument("--version", action=_VersionAction, help="show program version and exit")
@@ -432,9 +431,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--cf-api-key",
         default=None,
         help=(
-            "CurseForge Core API key for file lists, download URLs, and fingerprint "
-            "resolve. Env CURSEFORGE_API_KEY / CF_API_KEY also work. Without a key, "
-            "CurseForge-only jars stay uncheckable."
+            "Your own approved CurseForge Core API key (talks to api.curseforge.com). "
+            "Env CURSEFORGE_API_KEY / CF_API_KEY also work and are preferred; this flag "
+            "shows up on the process command line. Without it, the published app still "
+            "performs those Core operations via the publisher origin."
         ),
     )
     pc.add_argument(
