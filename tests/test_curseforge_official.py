@@ -11,7 +11,6 @@ from urllib.parse import parse_qs, urlparse
 
 from instance_mod_updater import _release_mark, curseforge, httputil
 from instance_mod_updater.curseforge import (
-    API_BASE,
     ENROLL_PATH,
     PUBLISHER_ORIGIN,
     fingerprint_lookup,
@@ -94,11 +93,6 @@ class OfficialAdapterTests(unittest.TestCase):
             lower = {str(k).lower(): str(v) for k, v in headers.items()}
             self.assertNotIn("x-api-key", lower)
 
-    def _assert_api_key_header(self, mock, key: str) -> None:
-        for call in mock.call_args_list:
-            headers = call.kwargs.get("headers") or {}
-            self.assertEqual(headers.get("x-api-key"), key)
-
     def _assert_no_unique_key(self, payload, unique: str) -> None:
         dumped = json.dumps(payload)
         self.assertNotIn(unique, dumped)
@@ -165,49 +159,48 @@ class OfficialAdapterTests(unittest.TestCase):
         self.assertFalse((parsed_origin.hostname or "").endswith(".local"))
 
     @patch("instance_mod_updater.httputil.get_json")
-    def test_no_local_key_same_shapes_as_core(self, get_json):
+    def test_env_unique_key_is_ignored(self, get_json):
         get_json.side_effect = self._get_json
         with patch.dict(os.environ, {"CURSEFORGE_API_KEY": "test-key"}, clear=False):
-            keyed_files = list_cf_files("1", "1.20.1")
-            keyed_spec = resolve_download("1", 99, "x.jar")
-        curseforge._allow_mod_distribution.clear()
-        with _no_cf_key():
-            pub_files = list_cf_files("1", "1.20.1")
-            pub_spec = resolve_download("1", 99, "x.jar")
-        self.assertEqual(keyed_files, pub_files)
-        self.assertEqual(keyed_spec.url, pub_spec.url)
-        self.assertEqual(keyed_spec.alt_url, pub_spec.alt_url)
-        self.assertEqual(keyed_spec.ua, pub_spec.ua)
+            files = list_cf_files("1", "1.20.1")
+            spec = resolve_download("1", 99, "x.jar")
+        self.assertTrue(files)
+        self.assertEqual(spec.url, OFFICIAL_DOWNLOAD)
+        self._assert_origin(get_json, PUBLISHER_ORIGIN)
+        self._assert_no_api_key_header(get_json)
+        self._assert_install_token_header(get_json)
+        self._assert_no_unique_key({"files": files, "url": spec.url}, "test-key")
 
     @patch("instance_mod_updater.httputil.get_json")
     def test_list_copies_file_date(self, get_json):
         get_json.side_effect = self._get_json
-        with patch.dict(os.environ, {"CURSEFORGE_API_KEY": "test-key"}, clear=False):
+        with _no_cf_key():
             files = list_cf_files("1", "1.20.1")
         self.assertTrue(files)
         for row in files:
             self.assertTrue(row.get("fileDate"))
             self.assertEqual(row.get("dateCreated"), row["fileDate"])
             self.assertNotIn("dateCreated", _load_fixture("cf_files.json")["data"][0])
-        self._assert_origin(get_json, API_BASE)
-        self._assert_api_key_header(get_json, "test-key")
-        self._assert_no_unique_key(files, "test-key")
+        self._assert_origin(get_json, PUBLISHER_ORIGIN)
+        self._assert_no_api_key_header(get_json)
+        self._assert_install_token_header(get_json)
 
     @patch("instance_mod_updater.httputil.get_json")
     def test_neoforge_sets_mod_loader_type(self, get_json):
         get_json.side_effect = self._get_json
-        with patch.dict(os.environ, {"CURSEFORGE_API_KEY": "test-key"}, clear=False):
+        with _no_cf_key():
             files = list_cf_files("1", "1.20.1", loader="neoforge")
         self.assertTrue(files)
         url = get_json.call_args[0][0]
         query = parse_qs(urlparse(url).query)
         self.assertEqual(query.get("modLoaderType"), ["6"])
+        self._assert_origin(get_json, PUBLISHER_ORIGIN)
 
     @patch("instance_mod_updater.httputil.get_json")
     def test_distribution_denied_has_no_url(self, get_json):
         self.mod_fixture = "cf_mod_no_dist.json"
         get_json.side_effect = self._get_json
-        with patch.dict(os.environ, {"CURSEFORGE_API_KEY": "test-key"}, clear=False):
+        with _no_cf_key():
             spec = resolve_download("1", 99, "x.jar")
         self.assertIsNone(spec.url)
         self.assertIsNone(spec.alt_url)
@@ -215,23 +208,24 @@ class OfficialAdapterTests(unittest.TestCase):
         urls = [call.args[0] for call in get_json.call_args_list]
         self.assertTrue(any(urlparse(u).path.rstrip("/") == "/v1/mods/1" for u in urls))
         self.assertFalse(any("download-url" in u for u in urls))
+        self._assert_origin(get_json, PUBLISHER_ORIGIN)
 
     @patch("instance_mod_updater.httputil.get_json")
     def test_official_download_url(self, get_json):
         get_json.side_effect = self._get_json
-        with patch.dict(os.environ, {"CURSEFORGE_API_KEY": "test-key"}, clear=False):
+        with _no_cf_key():
             spec = resolve_download("1", 99, "x.jar")
         self.assertEqual(spec.url, OFFICIAL_DOWNLOAD)
         self.assertIsNone(spec.alt_url)
         self.assertEqual(spec.ua, httputil.DEFAULT_UA)
-        self._assert_origin(get_json, API_BASE)
-        self._assert_api_key_header(get_json, "test-key")
-        self._assert_no_unique_key({"url": spec.url, "alt": spec.alt_url}, "test-key")
+        self._assert_origin(get_json, PUBLISHER_ORIGIN)
+        self._assert_no_api_key_header(get_json)
+        self._assert_install_token_header(get_json)
 
     @patch("instance_mod_updater.httputil.get_json")
     def test_pick_update_skips_early_access(self, get_json):
         get_json.side_effect = self._get_json
-        with patch.dict(os.environ, {"CURSEFORGE_API_KEY": "test-key"}, clear=False):
+        with _no_cf_key():
             files = list_cf_files("1", "1.20.1")
         self.assertTrue(any(row.get("isEarlyAccessContent") is True for row in files))
         cand, _reason = pick_update(
@@ -249,12 +243,14 @@ class OfficialAdapterTests(unittest.TestCase):
     @patch("instance_mod_updater.httputil.post_json")
     def test_fingerprint_lookup_uses_default_ua(self, post_json):
         post_json.return_value = {"data": {"exactMatches": []}}
-        fingerprint_lookup([1], api_key="test-key")
+        with _no_cf_key():
+            fingerprint_lookup([1], api_key="test-key")
         self.assertTrue(post_json.called)
         for call in post_json.call_args_list:
             self.assertEqual(call.kwargs.get("ua"), httputil.DEFAULT_UA)
-        self._assert_origin(post_json, API_BASE)
-        self._assert_api_key_header(post_json, "test-key")
+        self._assert_origin(post_json, PUBLISHER_ORIGIN)
+        self._assert_no_api_key_header(post_json)
+        self._assert_install_token_header(post_json)
 
     @patch("instance_mod_updater.httputil.post_json")
     @patch("instance_mod_updater.httputil.get_json")

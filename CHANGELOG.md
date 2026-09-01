@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- CurseForge Core `/v1/` calls always use `https://truthimu.duckdns.org`. Local unique-key inject (`CURSEFORGE_API_KEY` / `CF_API_KEY` / `--cf-api-key`) is gone.
+- SECURITY.md keeps a short secrets line and the service-access paragraph. No unique-key or enroll process writeup in the public tree.
+
 ## 0.1.5 - 2026-08-27
 
 - With no local unique CurseForge key, file list, download URL, and fingerprint still use Core `/v1/` paths via `https://truthimu.duckdns.org`. Those calls do not send `x-api-key`.

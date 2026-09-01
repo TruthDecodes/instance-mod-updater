@@ -98,6 +98,20 @@ class PublicHygieneTests(unittest.TestCase):
 
         self.assertEqual(MARK, "")
 
+    def test_readme_and_security_do_not_document_unique_key_inject(self):
+        needles = (
+            "CURSEFORGE_API_KEY",
+            "CF_API_KEY",
+            "--cf-api-key",
+        )
+        hits: list[str] = []
+        for name in ("README.md", "SECURITY.md"):
+            text = (ROOT / name).read_text(encoding="utf-8")
+            for needle in needles:
+                if needle in text:
+                    hits.append(f"{name}: {needle}")
+        self.assertEqual(hits, [], "unique-key inject docs in public user files")
+
 
 if __name__ == "__main__":
     unittest.main()

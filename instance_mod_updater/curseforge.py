@@ -21,8 +21,7 @@ from .versions import (
 # CF releaseType: 1=release, 2=beta, 3=alpha
 RT_RELEASE, RT_BETA, RT_ALPHA = 1, 2, 3
 UA = httputil.DEFAULT_UA
-API_BASE = "https://api.curseforge.com"
-# Public HTTPS origin for Core-shaped ops when no local unique application key.
+# Public HTTPS origin for Core-shaped ops. The published app does not send x-api-key.
 PUBLISHER_ORIGIN = "https://truthimu.duckdns.org"
 ENROLL_PATH = "/imu/enroll"
 MIN_RELEASE_MARK_LEN = 32
@@ -44,9 +43,7 @@ def _pace() -> None:
     httputil.CURSEFORGE_LIMITER.wait()
 
 
-def _core_origin(api_key: str | None) -> str:
-    if api_key:
-        return API_BASE
+def _core_origin(_api_key: str | None = None) -> str:
     return PUBLISHER_ORIGIN.rstrip("/")
 
 
@@ -126,20 +123,15 @@ def _publisher_bearer(origin: str, *, force: bool = False) -> str | None:
         return token
 
 
-def _request_headers(api_key: str | None) -> dict[str, str] | None:
-    key = (api_key or "").strip()
-    if key:
-        return {"x-api-key": key}
+def _request_headers(_api_key: str | None = None) -> dict[str, str] | None:
     token = _publisher_bearer(PUBLISHER_ORIGIN)
     if not token:
         return None
     return {"Authorization": f"Bearer {token}"}
 
 
-def _cf_get_json(url: str, *, api_key: str | None) -> Any:
+def _cf_get_json(url: str, *, api_key: str | None = None) -> Any:
     headers = _request_headers(api_key)
-    if api_key:
-        return httputil.get_json(url, ua=UA, headers=headers)
     if not headers:
         return None
     try:
@@ -148,7 +140,7 @@ def _cf_get_json(url: str, *, api_key: str | None) -> Any:
         )
     except httputil.HttpUnauthorized:
         _publisher_bearer(PUBLISHER_ORIGIN, force=True)
-        headers = _request_headers(None)
+        headers = _request_headers()
         if not headers:
             return None
         try:
@@ -159,10 +151,8 @@ def _cf_get_json(url: str, *, api_key: str | None) -> Any:
             return None
 
 
-def _cf_post_json(url: str, body: Any, *, api_key: str | None) -> Any:
+def _cf_post_json(url: str, body: Any, *, api_key: str | None = None) -> Any:
     headers = _request_headers(api_key)
-    if api_key:
-        return httputil.post_json(url, body, ua=UA, headers=headers)
     if not headers:
         return None
     try:
@@ -171,7 +161,7 @@ def _cf_post_json(url: str, body: Any, *, api_key: str | None) -> Any:
         )
     except httputil.HttpUnauthorized:
         _publisher_bearer(PUBLISHER_ORIGIN, force=True)
-        headers = _request_headers(None)
+        headers = _request_headers()
         if not headers:
             return None
         try:
@@ -182,18 +172,8 @@ def _cf_post_json(url: str, body: Any, *, api_key: str | None) -> Any:
             return None
 
 
-def resolve_api_key(explicit: str | None = None) -> str | None:
-    """Optional CF Core API key from flag or CURSEFORGE_API_KEY / CF_API_KEY env."""
-    for raw in (
-        explicit,
-        os.environ.get("CURSEFORGE_API_KEY"),
-        os.environ.get("CF_API_KEY"),
-    ):
-        if raw is None:
-            continue
-        key = str(raw).strip()
-        if key:
-            return key
+def resolve_api_key(explicit: str | None = None, **kwargs: Any) -> None:
+    """Published app does not accept a local unique CurseForge key."""
     return None
 
 
@@ -246,14 +226,13 @@ def fingerprint_lookup(
     Official fingerprint match: POST /v1/fingerprints/{gameId}.
 
     Returns map fingerprint -> match row (includes file.modId, file.id, …).
-    No search endpoints. Local unique key talks to Core API; otherwise the
-    publisher origin.
+    No search endpoints. Publisher origin only.
     """
     fps = [int(f) & 0xFFFFFFFF for f in fingerprints if f is not None]
     if not fps:
         return {}
     key = resolve_api_key(api_key)
-    origin = _core_origin(key)
+    origin = _core_origin()
     uniq = sorted(set(fps))
     _pace()
     data = _cf_post_json(
@@ -320,9 +299,9 @@ def list_cf_files_official(
     loader: str | None = None,
     max_pages: int = 5,
 ) -> list[dict]:
-    """GET /v1/mods/{modId}/files. Core API with a local unique key; else publisher origin."""
+    """GET /v1/mods/{modId}/files via the publisher origin."""
     key = resolve_api_key(api_key)
-    origin = _core_origin(key)
+    origin = _core_origin()
     out: list[dict] = []
     index = 0
     page_size = _PAGE_SIZE
@@ -362,11 +341,10 @@ def list_cf_files(
     loader: str | None = None,
     max_pages: int = 5,
 ) -> list[dict]:
-    """Official Core file list (local unique key or publisher origin)."""
+    """Official Core file list via the publisher origin."""
     return list_cf_files_official(
         project_id,
         game,
-        api_key=resolve_api_key(),
         loader=loader,
         max_pages=max_pages,
     )
@@ -406,17 +384,14 @@ def prefetch_files(
     return out
 
 
-def _mod_allows_distribution(project_id: str, key: str | None) -> bool:
+def _mod_allows_distribution(project_id: str, key: str | None = None) -> bool:
     """False only when allowModDistribution is explicitly False."""
     pid = str(project_id)
     with _allow_mod_lock:
         if pid in _allow_mod_distribution:
             return _allow_mod_distribution[pid] is not False
     _pace()
-    data = _cf_get_json(
-        f"{_core_origin(key)}/v1/mods/{pid}",
-        api_key=key,
-    )
+    data = _cf_get_json(f"{_core_origin()}/v1/mods/{pid}", api_key=key)
     allow: Any = None
     payload = _payload_data(data)
     if isinstance(payload, dict) and "allowModDistribution" in payload:
@@ -426,10 +401,10 @@ def _mod_allows_distribution(project_id: str, key: str | None) -> bool:
     return allow is not False
 
 
-def _get_mod_file(project_id: str, file_id: int, key: str | None) -> dict | None:
+def _get_mod_file(project_id: str, file_id: int, key: str | None = None) -> dict | None:
     _pace()
     data = _cf_get_json(
-        f"{_core_origin(key)}/v1/mods/{project_id}/files/{file_id}",
+        f"{_core_origin()}/v1/mods/{project_id}/files/{file_id}",
         api_key=key,
     )
     payload = _payload_data(data)
@@ -451,11 +426,9 @@ class DownloadSpec:
 
 def file_download_url(project_id: str, file_id: int) -> str | None:
     """GET /v1/mods/{modId}/files/{fileId}/download-url. None if no URL."""
-    key = resolve_api_key()
     _pace()
     data = _cf_get_json(
-        f"{_core_origin(key)}/v1/mods/{project_id}/files/{file_id}/download-url",
-        api_key=key,
+        f"{_core_origin()}/v1/mods/{project_id}/files/{file_id}/download-url",
     )
     if data is None:
         return None
@@ -463,12 +436,11 @@ def file_download_url(project_id: str, file_id: int) -> str | None:
 
 
 def resolve_download(project_id: str, file_id: int, filename: str) -> DownloadSpec:
-    """Official download-url (local unique key or publisher origin)."""
+    """Official download-url via the publisher origin."""
     empty = DownloadSpec(url=None, alt_url=None, ua=UA)
-    key = resolve_api_key()
-    if not _mod_allows_distribution(project_id, key):
+    if not _mod_allows_distribution(project_id):
         return empty
-    row = _get_mod_file(project_id, file_id, key)
+    row = _get_mod_file(project_id, file_id)
     if row is not None and row.get("isAvailable") is False:
         return empty
     url = file_download_url(project_id, file_id)
