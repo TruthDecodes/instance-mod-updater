@@ -39,7 +39,7 @@ Use `run.cmd`. It refreshes this tool from a signed GitHub Release, then checks 
 If FTB App offers to reinstall the pack loader, decline.
 
 Dry run, report-then-apply, or explicit pack ids: [Step by step](#step-by-step) · [Pack metadata](#pack-metadata-ftb).
-CurseForge file lists, download URLs, and fingerprints run without a local unique key. If you hold your own approved Core API key, you can still inject it: [Requirements](#requirements).
+CurseForge file lists, download URLs, and fingerprints work for the published Release.
 
 ### Safety
 
@@ -52,7 +52,7 @@ Close the game before apply or a loader upgrade. Replaced jars and `instance.jso
 | Source | Auth |
 | --- | --- |
 | **Modrinth** | Public API (jar SHA1 identity; exact `GET /project/{modid\|stem}` when hash misses) |
-| **CurseForge** | Official [Core API](https://docs.curseforge.com/rest-api/). File list, download URL, and fingerprint match. With no local unique key, those Core `/v1/` calls go to `https://truthimu.duckdns.org` and do not send `x-api-key`. If you inject your own approved key (`CURSEFORGE_API_KEY` or `CF_API_KEY`; `--cf-api-key` also works but shows up on the process command line), those calls go to `api.curseforge.com` with `x-api-key`. Project ids may come from the FTB pack manifest or from a fingerprint hit. No CurseForge search. |
+| **CurseForge** | Official [Core API](https://docs.curseforge.com/rest-api/). File list, download URL, and fingerprint match. Core `/v1/` calls go to `https://truthimu.duckdns.org` and do not send `x-api-key`. Project ids may come from the FTB pack manifest or from a fingerprint hit. No CurseForge search. |
 | **NeoForge** | Official Maven installer into FTB App `bin\` |
 
 ## Requirements
@@ -61,7 +61,6 @@ Close the game before apply or a loader upgrade. Replaced jars and `instance.jso
 - FTB App installed (`%LOCALAPPDATA%\.ftba`)
 - Python 3.11+ **or** bundled embeddable CPython under `runtime\python\`
 - Close Minecraft before `apply` / loader upgrade
-- Optional: your own approved CurseForge Core API key if you want those Core calls to go to `api.curseforge.com` as you (`CURSEFORGE_API_KEY` or `CF_API_KEY`)
 
 No `pip` packages. Stdlib only.
 
@@ -186,13 +185,13 @@ https://api.feed-the-beast.com/v1/modpacks/public/modpack/{packId}/{versionId}
 - NeoForge upgrade uses the latest **matching MC line** (e.g. `26.1.2.x` for MC `26.1.2`, not `26.2.x`) when mod dependency floors require it.
 - NeoForge floor is taken from **neoforge** dependency ranges in mods.toml, not FML `loaderVersion` (e.g. `[63,)`).
 - **Status meanings (layman):**
-  - **`current`**: we looked up Modrinth and/or CurseForge and you already have the newest eligible build for this MC+loader. Safe to read as “up to date on a public listing.” A local unique CurseForge key is not required for that lookup.
+  - **`current`**: we looked up Modrinth and/or CurseForge and you already have the newest eligible build for this MC+loader. Safe to read as “up to date on a public listing.”
   - **`uncheckable` / `pack_only`**: latest was **not** checked. Structured reason codes + short why (CLI + report). Matching the pack pin is **never** “up to date.”
   - **`no_source`**: no Modrinth hash, no pack row, and cascade still failed (same style of reasons).
   - **`errors`**: problems found after the scan. Not a count of failed downloads. Typical: a required companion is not a separate jar and is not bundled in the parent (JarJar / extra `[[mods]]`); or a companion is present but no matching update was found. The console lists every error in red. Libraries the game already loads from inside a parent jar are not errors.
 - **Resolve cascade** (when jar SHA1 is not on Modrinth **and** the pack row has no CurseForge project id):
   1. Exact Modrinth `GET /project/{id-or-slug}` using installed **modid** and jar **product stem** only. **No** free-text Modrinth search.
-  2. CurseForge **fingerprint** (`hashes.cfMurmur` or local jar murmur). Official `POST /v1/fingerprints/{gameId}` only. **No** CurseForge search. A local unique key is not required.
+  2. CurseForge **fingerprint** (`hashes.cfMurmur` or local jar murmur). Official `POST /v1/fingerprints/{gameId}` only. **No** CurseForge search.
   3. If still unresolved → **uncheckable** with codes such as `mr_project_not_found`, `mr_no_eligible_version`, `fingerprint_miss`, `ftb_private_blob`.
 - **True FTB-only blobs** (e.g. `ftb-auxilium-neoforge-*.jar`): cascade finds no public project → `ftb_private_blob` / pack pin match; optional re-sync from the pack file URL when local SHA differs (`pack_ftb_only_pin_refresh`). Never counted under `current`.
 

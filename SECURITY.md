@@ -39,11 +39,13 @@ Skip a launch with `--no-self-update` or
 
 Do not put API keys in this repository.
 
-A CurseForge Core API key may be supplied at run time if it is yours
-(`CURSEFORGE_API_KEY` or `CF_API_KEY`). Prefer the environment: `--cf-api-key`
-is visible on the process command line. Without a local unique key, the
-published app still performs those Core operations via the publisher origin.
-Keep any key in your environment, not in a file that gets copied or committed.
+## Service access
+
+The MIT license is for this software. It does not grant use of any network
+service the official application contacts. Those services exist only for
+official signed releases of instance-mod-updater published by Truth. Access
+from other software is not allowed. Access may be rate-limited, changed, or
+withdrawn at any time.
 
 ## Assumptions
 

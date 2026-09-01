@@ -605,9 +605,6 @@ def check_updates(
     jars_dir = work / "jars"
     jars_dir.mkdir(parents=True, exist_ok=True)
 
-    if cf_api_key and str(cf_api_key).strip():
-        os.environ["CURSEFORGE_API_KEY"] = str(cf_api_key).strip()
-
     mc = inst.mc_version
     loader = inst.loader_kind
     if not mc:
@@ -737,7 +734,6 @@ def check_updates(
         )
 
     # Spec 6 cascade (no MR hash + no pack CF): exact Modrinth GET, then optional CF fingerprint
-    api_key = curseforge.resolve_api_key(cf_api_key)
     mr_project_cache: dict[str, dict | None] = {}
     # jar_name -> (project_dict, matched_slug) when exact GET hits
     mr_exact_for: dict[str, tuple[dict, str]] = {}
@@ -826,7 +822,7 @@ def check_updates(
                 if m not in need_fp:
                     need_fp.append(m)
 
-        # CF fingerprint for remaining jars (local unique key or publisher origin)
+        # CF fingerprint for remaining jars (publisher origin)
         if need_fp:
             fp_values: list[int] = []
             jar_fp: dict[str, int] = {}
@@ -848,7 +844,7 @@ def check_updates(
                     log,
                 )
                 try:
-                    matches = curseforge.fingerprint_lookup(fp_values, api_key=api_key)
+                    matches = curseforge.fingerprint_lookup(fp_values)
                 except Exception:
                     matches = {}
                     for m in need_fp:

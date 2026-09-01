@@ -257,7 +257,6 @@ def cmd_check(args: argparse.Namespace) -> int:
         pack_id=args.pack_id,
         version_id=args.version_id,
         download=not args.no_download,
-        cf_api_key=getattr(args, "cf_api_key", None),
     )
     term.blank()
     print_check_summary(result, work, current_neoforge=inst.neoforge_version)
@@ -322,7 +321,6 @@ def cmd_all(args: argparse.Namespace) -> int:
         pack_id=args.pack_id,
         version_id=args.version_id,
         download=True,
-        cf_api_key=getattr(args, "cf_api_key", None),
     )
     term.blank()
     print_check_summary(result, work, current_neoforge=inst.neoforge_version)
@@ -428,16 +426,6 @@ def build_parser() -> argparse.ArgumentParser:
     pc.add_argument("--version-id", type=int, default=None, help="FTB pack version id (e.g. 100392)")
     pc.add_argument("--pack-json", type=Path, default=None, help="Local FTB pack JSON instead of API")
     pc.add_argument(
-        "--cf-api-key",
-        default=None,
-        help=(
-            "Your own approved CurseForge Core API key (talks to api.curseforge.com). "
-            "Env CURSEFORGE_API_KEY / CF_API_KEY also work and are preferred; this flag "
-            "shows up on the process command line. Without it, the published app still "
-            "performs those Core operations via the publisher origin."
-        ),
-    )
-    pc.add_argument(
         "--no-download",
         action="store_true",
         help="Only write report/manifest; do not download jars",
@@ -472,11 +460,6 @@ def build_parser() -> argparse.ArgumentParser:
     pall.add_argument("--pack-id", type=int, default=None)
     pall.add_argument("--version-id", type=int, default=None)
     pall.add_argument("--pack-json", type=Path, default=None)
-    pall.add_argument(
-        "--cf-api-key",
-        default=None,
-        help="CurseForge Core API key (see check)",
-    )
     pall.add_argument("--target", default=None, help="Pin NeoForge version")
     pall.add_argument("--dry-run", action="store_true", help="Check only; no apply/loader write")
     pall.add_argument(
