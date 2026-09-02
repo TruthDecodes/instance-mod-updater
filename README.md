@@ -18,10 +18,6 @@ License: [MIT](LICENSE). Copyright 2026 Truth. Security: [SECURITY.md](SECURITY.
 .\run.cmd list
 ```
 
-The Release zip includes a pinned Windows embeddable Python® under `runtime\python\`
-(with that build’s `LICENSE.txt`). You do not need a separate python.org install.
-See [No Python?](#no-python) only if that runtime is missing or broken.
-
 ## Update mods
 
 Close Minecraft. Open a command prompt in the folder where you put `run.cmd`.
@@ -133,8 +129,8 @@ CurseForge file lists, download URLs, and fingerprints work for the published Re
 ## How the tool updates itself
 
 `run.cmd` already refreshes from a signed GitHub Release before each command.
-App code and the bundled `runtime\` are replaced (`instance_mod_updater\`,
-`scripts\`, `tests\`, `run.cmd`, `run.ps1`, `deploy.cmd`, docs, and so on).
+App files are replaced (`instance_mod_updater\`, `scripts\`, `tests\`,
+`run.cmd`, `run.ps1`, `deploy.cmd`, docs, and so on).
 
 Left alone: `jars\`, `manifest.json`, `report-*`, `pack-*.json`,
 backups, installer jars, logs, and any extra files you added.
@@ -144,25 +140,10 @@ public key baked into the running updater. Floating `main` zips are not used.
 
 One-shot refresh without a mod command: `.\deploy.cmd`
 
-## No Python?
-
-Signed Releases already ship `runtime\python\`. `run.cmd` uses that first, then a
-real Python 3.11+ on PATH (`py` or `python`, not the Microsoft Store stub).
-
-If you installed from a git checkout (no Release zip) or the runtime folder is
-missing, fetch the same pinned embed:
-
-```text
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\fetch-runtime.ps1
-```
-
-Then run `.\run.cmd list` again. A system python.org install is only a fallback.
-
 ## From source (optional)
 
-Git clone into any folder if you prefer that over the Release zip. Git does not
-include the embed; run `fetch-runtime.ps1` once (or use system Python). Prefer
-the Release zip for normal use; `main` is unsigned.
+Prefer the Release zip. A git clone of `main` is unsigned and is for
+development only:
 
 ```text
 git clone https://github.com/TruthDecodes/instance-mod-updater.git
@@ -171,28 +152,5 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\fetch-runtime.ps1
 .\run.cmd list
 ```
 
-## Layout
-
-```text
-(your folder)/
-  run.cmd
-  deploy.cmd
-  README.md
-  runtime\python\   (embeddable CPython from the Release zip; includes LICENSE.txt)
-  scripts/
-    fetch-runtime.ps1
-    self-update.ps1
-    sign-release.py
-  instance_mod_updater/
-    …
-```
-
 `run.ps1` exists for the same commands if you want PowerShell. Prefer `run.cmd`
-so you do not fight ExecutionPolicy. Maintainer-only: `scripts\sign-release.py`.
-
-## Third-party
-
-This application redistributes the official Windows [embeddable package](https://docs.python.org/3/using/windows.html#the-embeddable-package)
-from python.org under the Python Software Foundation License. The full license
-text ships as `runtime\python\LICENSE.txt`. “Python” is a registered trademark
-of the Python Software Foundation.
+so you do not fight ExecutionPolicy.

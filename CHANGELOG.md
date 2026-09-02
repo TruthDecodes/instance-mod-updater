@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- README Install is unzip and run only. Dropped embed/LICENSE/No Python packaging narration for Release users.
+
 ## 0.1.7 - 2026-09-02
 
 - Signed Release zip includes the pinned Windows embeddable Python under `runtime\python\` (with `LICENSE.txt`)
