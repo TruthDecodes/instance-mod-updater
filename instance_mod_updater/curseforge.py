@@ -436,7 +436,11 @@ def file_download_url(project_id: str, file_id: int) -> str | None:
 
 
 def resolve_download(project_id: str, file_id: int, filename: str) -> DownloadSpec:
-    """Official download-url via the publisher origin."""
+    """Resolve a client-fetchable download URL via the publisher origin.
+
+    Returns a CDN URL the caller fetches directly (no x-api-key on the jar
+    transfer). The publisher does not haul jar bytes.
+    """
     empty = DownloadSpec(url=None, alt_url=None, ua=UA)
     if not _mod_allows_distribution(project_id):
         return empty

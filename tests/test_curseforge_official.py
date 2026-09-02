@@ -223,6 +223,25 @@ class OfficialAdapterTests(unittest.TestCase):
         self._assert_install_token_header(get_json)
 
     @patch("instance_mod_updater.httputil.get_json")
+    def test_download_url_is_client_side_not_publisher_proxy(self, get_json):
+        """Jar bytes stay on the client CDN URL; publisher only resolves the URL."""
+        get_json.side_effect = self._get_json
+        with _no_cf_key():
+            spec = resolve_download("1", 99, "x.jar")
+        parsed = urlparse(spec.url)
+        publisher = urlparse(PUBLISHER_ORIGIN)
+        self.assertEqual(parsed.scheme, "https")
+        self.assertTrue(parsed.netloc)
+        self.assertNotEqual(parsed.netloc, publisher.netloc)
+        self.assertFalse(parsed.path.startswith("/v1/"))
+        self.assertNotIn("file-proxy", parsed.path)
+        self.assertNotIn("proxy", parsed.path.lower())
+        self.assertIsNone(spec.alt_url)
+        meta_urls = [call.args[0] for call in get_json.call_args_list]
+        self.assertTrue(any("download-url" in u for u in meta_urls))
+        self._assert_no_api_key_header(get_json)
+
+    @patch("instance_mod_updater.httputil.get_json")
     def test_pick_update_skips_early_access(self, get_json):
         get_json.side_effect = self._get_json
         with _no_cf_key():
