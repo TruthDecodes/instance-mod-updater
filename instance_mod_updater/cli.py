@@ -199,7 +199,7 @@ def _add_common(p: argparse.ArgumentParser) -> None:
         "--work-root",
         type=Path,
         default=None,
-        help="Staging dir for jars/reports (default: %%PUBLIC%%\\instance-mod-updater)",
+        help="Staging dir for jars/reports (default: folder that contains run.cmd)",
     )
     p.add_argument(
         "--instance",

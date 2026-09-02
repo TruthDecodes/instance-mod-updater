@@ -17,10 +17,8 @@ def default_ftba_root() -> Path:
 
 
 def default_work_root() -> Path:
-    public = Path(os.environ.get("PUBLIC", r"C:\Users\Public"))
-    if public.is_dir():
-        return public / "instance-mod-updater"
-    return Path.home() / "instance-mod-updater"
+    # Install root: folder that contains run.cmd and this package.
+    return Path(__file__).resolve().parent.parent
 
 
 @dataclass

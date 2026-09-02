@@ -3,7 +3,7 @@
 .SYNOPSIS
   Launch instance-mod-updater on this PC (run as the Windows user that owns the FTB App instance).
   This tool updates mods on an existing FTB App instance. Not an official Feed the Beast product.
-  If you still have %PUBLIC%\ftb-instance-updater, move/copy the tree to %PUBLIC%\instance-mod-updater so work jars stay with the new name.
+  If you still have an older ftb-instance-updater folder, rename or copy that tree to instance-mod-updater so staged jars stay with the app.
 
 .NOTES
   If you see "running scripts is disabled", either:

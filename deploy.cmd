@@ -5,10 +5,10 @@ cd /d "%~dp0"
 REM Update instance-mod-updater app code from a signed GitHub Release.
 REM This tool updates mods on an existing FTB App instance. Not an official Feed the Beast product.
 REM Leaves runtime, staged jars, reports, manifests, backups, and extra local files alone.
-REM Usage (from C:\Users\Public\instance-mod-updater):
+REM Usage (from the folder that contains this file):
 REM   deploy.cmd
 REM   deploy.cmd --check-only
-REM If you still have %PUBLIC%\ftb-instance-updater, move/copy the tree to %PUBLIC%\instance-mod-updater so work jars stay with the new name.
+REM If you still have an older ftb-instance-updater folder, rename or copy that tree to instance-mod-updater so staged jars stay with the app.
 
 set "ROOT=%~dp0"
 set "PYTHONPATH=%ROOT%"
