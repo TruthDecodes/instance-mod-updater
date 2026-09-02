@@ -9,11 +9,14 @@ from . import __version__, term
 from .app_local import (
     default_ftba_root,
     default_work_root,
+    format_instance_choice,
     list_instances,
-    resolve_instance,
+    load_instance,
+    select_instances,
 )
 from .pipeline import CheckResult, apply_manifest, check_updates, error_layman, upgrade_neoforge
 
+SUBCOMMANDS = frozenset({"list", "check", "apply", "upgrade-loader", "self-update"})
 
 def _count(label: str, n: int, *, hot: str | None = None) -> str:
     """label=n with optional color when n > 0 (hot=green|cyan|magenta|yellow|red)."""
@@ -202,16 +205,26 @@ def _add_common(p: argparse.ArgumentParser) -> None:
         help="Staging dir for jars/reports (default: folder that contains run.cmd)",
     )
     p.add_argument(
-        "--instance",
-        "-i",
-        default=None,
-        help="Instance folder name, display name substring, or full path",
-    )
-    p.add_argument(
         "--no-self-update",
         action="store_true",
         help="Do not refresh app code from GitHub before this command",
     )
+
+
+def _add_instance_number(p: argparse.ArgumentParser) -> None:
+    p.add_argument(
+        "instance",
+        nargs="?",
+        type=int,
+        default=None,
+        help="Instance number (optional; same order as list)",
+    )
+
+
+def _work_for(inst, work_root: Path, *, many: bool) -> Path:
+    if many:
+        return work_root / inst.path.name
+    return work_root
 
 
 def cmd_list(args: argparse.Namespace) -> int:
@@ -220,12 +233,10 @@ def cmd_list(args: argparse.Namespace) -> int:
     if not insts:
         print(term.yellow(f"No instances under {root / 'instances'}"))
         return 1
-    for i, inst in enumerate(insts):
-        if i:
+    for i, inst in enumerate(insts, start=1):
+        if i > 1:
             term.blank()
-        # Bright cyan title — bold-only is invisible on default dark PS themes
-        print(term.cyan(inst.path.name))
-        print(f"  {term.label('name', inst.name)}")
+        print(term.cyan(format_instance_choice(i, inst)))
         print(
             f"  {term.label('mc', term.green(str(inst.mc_version)))}  "
             f"{term.label('loader', term.yellow(str(inst.mod_loader)))}"
@@ -241,26 +252,34 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 def cmd_check(args: argparse.Namespace) -> int:
     root = args.ftba_root or default_ftba_root()
-    work = args.work_root or default_work_root()
-    inst = resolve_instance(args.instance, root)
-    print(f"{term.cyan('Instance:')} {term.cyan(inst.path.name)}")
-    print(term.dim(str(inst.path)))
-    print(
-        f"MC={term.green(str(inst.mc_version))}  "
-        f"loader={term.yellow(str(inst.mod_loader))}"
-    )
-    term.blank()
-    result, work = check_updates(
-        inst,
-        work_root=work,
-        pack_path=args.pack_json,
-        pack_id=args.pack_id,
-        version_id=args.version_id,
-        download=not args.no_download,
-    )
-    term.blank()
-    print_check_summary(result, work, current_neoforge=inst.neoforge_version)
-    return 0 if not result.errors else 1
+    base_work = args.work_root or default_work_root()
+    chosen = select_instances(args.instance, root, allow_all=True)
+    many = len(chosen) > 1
+    rc = 0
+    for inst in chosen:
+        work = _work_for(inst, base_work, many=many)
+        print(f"{term.cyan('Instance:')} {term.cyan(inst.path.name)}")
+        print(term.dim(str(inst.path)))
+        print(
+            f"MC={term.green(str(inst.mc_version))}  "
+            f"loader={term.yellow(str(inst.mod_loader))}"
+        )
+        term.blank()
+        result, work = check_updates(
+            inst,
+            work_root=work,
+            pack_path=args.pack_json,
+            pack_id=args.pack_id,
+            version_id=args.version_id,
+            download=not args.no_download,
+        )
+        term.blank()
+        print_check_summary(result, work, current_neoforge=inst.neoforge_version)
+        if result.errors:
+            rc = 1
+        if many:
+            term.blank()
+    return rc
 
 
 def cmd_apply(args: argparse.Namespace) -> int:
@@ -271,48 +290,53 @@ def cmd_apply(args: argparse.Namespace) -> int:
 
 def cmd_upgrade_loader(args: argparse.Namespace) -> int:
     root = args.ftba_root or default_ftba_root()
-    work = args.work_root or default_work_root()
-    inst = resolve_instance(args.instance, root)
-    floor = args.floor
-    if args.floor_from_mods or floor is None:
-        from .inventory import min_neoforge_from_ranges, scan_mods_dir
+    base_work = args.work_root or default_work_root()
+    chosen = select_instances(args.instance, root, allow_all=True)
+    many = len(chosen) > 1
+    for inst in chosen:
+        work = _work_for(inst, base_work, many=many)
+        floor = args.floor
+        if args.floor_from_mods or floor is None:
+            from .inventory import min_neoforge_from_ranges, scan_mods_dir
 
-        mods = scan_mods_dir(inst.mods_dir, read_meta=True)
-        detected = min_neoforge_from_ranges(mods)
-        # also from latest report
-        rep = work / "report-latest.json"
-        if rep.is_file():
-            data = json.loads(rep.read_text(encoding="utf-8-sig"))
-            if data.get("min_neoforge_floor"):
-                detected = data["min_neoforge_floor"] or detected
-        floor = floor or detected
-        print(f"Detected NeoForge floor: {floor}")
-    if not args.force and floor:
-        from .versions import neoforge_gte
+            mods = scan_mods_dir(inst.mods_dir, read_meta=True)
+            detected = min_neoforge_from_ranges(mods)
+            rep = work / "report-latest.json"
+            if rep.is_file():
+                data = json.loads(rep.read_text(encoding="utf-8-sig"))
+                if data.get("min_neoforge_floor"):
+                    detected = data["min_neoforge_floor"] or detected
+            floor = floor or detected
+            print(f"Detected NeoForge floor: {floor}")
+        if not args.force and floor:
+            from .versions import neoforge_gte
 
-        cur = inst.neoforge_version
-        if cur and neoforge_gte(cur, floor):
-            print(term.green(f"Already OK: NeoForge {cur} >= floor {floor}"))
-            if not args.target:
-                return 0
-    target = upgrade_neoforge(
-        inst,
-        target=args.target,
-        floor=floor,
-        work_root=work,
-        ftba_root=root,
-    )
-    term.blank()
-    print(term.green(f"NeoForge now: {target}"))
-    print(term.dim("Next: launch from FTB App; decline any offer to reinstall pack loader."))
+            cur = inst.neoforge_version
+            if cur and neoforge_gte(cur, floor):
+                print(term.green(f"Already OK: NeoForge {cur} >= floor {floor}"))
+                if not args.target:
+                    continue
+        target = upgrade_neoforge(
+            inst,
+            target=args.target,
+            floor=floor,
+            work_root=work,
+            ftba_root=root,
+        )
+        term.blank()
+        print(term.green(f"NeoForge now: {target}"))
+        print(
+            term.dim(
+                "Next: launch from FTB App; decline any offer to reinstall pack loader."
+            )
+        )
+        if many:
+            term.blank()
     return 0
 
 
-def cmd_all(args: argparse.Namespace) -> int:
+def _update_one(args: argparse.Namespace, inst, work: Path, root: Path) -> int:
     """check (+download) → apply → upgrade NeoForge if floor requires it."""
-    root = args.ftba_root or default_ftba_root()
-    work = args.work_root or default_work_root()
-    inst = resolve_instance(args.instance, root)
     print(term.section(f"=== check: {inst.path.name} ==="))
     result, work = check_updates(
         inst,
@@ -336,9 +360,7 @@ def cmd_all(args: argparse.Namespace) -> int:
         print(term.dim("No mod jar updates to apply"))
 
     floor = result.min_neoforge_floor
-    cur = inst.neoforge_version
-    # reload instance after apply (loader unchanged yet)
-    inst = resolve_instance(str(inst.path), root)
+    inst = load_instance(inst.path)
     cur = inst.neoforge_version
     need = False
     if floor and cur:
@@ -378,6 +400,23 @@ def cmd_all(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_update(args: argparse.Namespace) -> int:
+    """Default path: full update for one or every selected instance."""
+    root = args.ftba_root or default_ftba_root()
+    base_work = args.work_root or default_work_root()
+    chosen = select_instances(getattr(args, "instance", None), root, allow_all=True)
+    many = len(chosen) > 1
+    rc = 0
+    for inst in chosen:
+        work = _work_for(inst, base_work, many=many)
+        code = _update_one(args, inst, work, root)
+        if code:
+            rc = code
+        if many:
+            term.blank()
+    return rc
+
+
 def cmd_self_update(args: argparse.Namespace) -> int:
     from .self_update import main as self_update_main
 
@@ -391,15 +430,37 @@ def cmd_self_update(args: argparse.Namespace) -> int:
     return self_update_main(extra)
 
 
+def _add_update_flags(p: argparse.ArgumentParser) -> None:
+    _add_common(p)
+    p.add_argument("--pack-id", type=int, default=None, help="FTB modpack id (e.g. 132)")
+    p.add_argument(
+        "--version-id", type=int, default=None, help="FTB pack version id (e.g. 100392)"
+    )
+    p.add_argument(
+        "--pack-json", type=Path, default=None, help="Local FTB pack JSON instead of API"
+    )
+    p.add_argument("--target", default=None, help="Pin NeoForge version")
+    p.add_argument(
+        "--dry-run", action="store_true", help="Check only; no apply/loader write"
+    )
+    p.add_argument(
+        "--force-loader",
+        action="store_true",
+        help="Always run NeoForge install even if floor already met",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = _ColorArgumentParser(
         prog="instance-mod-updater",
         description=(
             "Unfinished experimental tool (not a release). Not an official Feed the Beast "
-            "product. Update mods on an existing FTB App instance (pre-existing modlist). "
-            "Modrinth public API. CurseForge official Core API (file list, download URL, "
-            "fingerprint). Optional NeoForge client install into FTB App bin."
+            "product. With no command, updates mods on an FTB App instance "
+            "(check, download, apply, NeoForge if needed). "
+            "Optional instance number: run.cmd 1"
         ),
+        epilog="Default: .\\run.cmd   or   .\\run.cmd 1",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument("--version", action=_VersionAction, help="show program version and exit")
     p.add_argument(
@@ -408,20 +469,18 @@ def build_parser() -> argparse.ArgumentParser:
         default="auto",
         help="ANSI colors: auto (default), always, never. Also NO_COLOR / FORCE_COLOR.",
     )
-    p.add_argument(
-        "--no-self-update",
-        action="store_true",
-        help="Do not refresh app code from GitHub before this command",
-    )
-    # required=False so bare `run.cmd` / no-args shows colored help instead of a hard error
+    _add_update_flags(p)
+    p.set_defaults(func=cmd_update, cmd=None, instance=None)
+
     sub = p.add_subparsers(dest="cmd", required=False)
 
-    pl = sub.add_parser("list", help="List FTB App instances")
+    pl = sub.add_parser("list", help="List FTB App instances with numbers")
     _add_common(pl)
     pl.set_defaults(func=cmd_list)
 
     pc = sub.add_parser("check", help="Scan instance mods; stage updates under work root")
     _add_common(pc)
+    _add_instance_number(pc)
     pc.add_argument("--pack-id", type=int, default=None, help="FTB modpack id (e.g. 132)")
     pc.add_argument("--version-id", type=int, default=None, help="FTB pack version id (e.g. 100392)")
     pc.add_argument("--pack-json", type=Path, default=None, help="Local FTB pack JSON instead of API")
@@ -442,6 +501,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Install latest NeoForge for this MC into FTB bin and retarget instance",
     )
     _add_common(pu)
+    _add_instance_number(pu)
     pu.add_argument("--target", default=None, help="Exact NeoForge version (default: latest for MC)")
     pu.add_argument("--floor", default=None, help="Minimum NeoForge version required")
     pu.add_argument(
@@ -451,23 +511,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pu.add_argument("--force", action="store_true", help="Install even if floor already met")
     pu.set_defaults(func=cmd_upgrade_loader)
-
-    pall = sub.add_parser(
-        "all",
-        help="Check + download + apply + upgrade NeoForge if mod floor requires it",
-    )
-    _add_common(pall)
-    pall.add_argument("--pack-id", type=int, default=None)
-    pall.add_argument("--version-id", type=int, default=None)
-    pall.add_argument("--pack-json", type=Path, default=None)
-    pall.add_argument("--target", default=None, help="Pin NeoForge version")
-    pall.add_argument("--dry-run", action="store_true", help="Check only; no apply/loader write")
-    pall.add_argument(
-        "--force-loader",
-        action="store_true",
-        help="Always run NeoForge install even if floor already met",
-    )
-    pall.set_defaults(func=cmd_all)
 
     ps = sub.add_parser(
         "self-update",
@@ -481,10 +524,38 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _peel_instance_number(raw: list[str]) -> tuple[int | None, list[str]]:
+    """Leading bare number is the instance for the default update path only."""
+    if not raw:
+        return None, raw
+    tok = raw[0]
+    if not tok.isdigit() or tok.startswith("0"):
+        return None, raw
+    n = int(tok)
+    if n < 1:
+        return None, raw
+    rest = raw[1:]
+    if rest and rest[0] in SUBCOMMANDS:
+        raise SystemExit(
+            f"Put the instance number after the command (example: {rest[0]} {n})"
+        )
+    return n, rest
+
+
 def main(argv: list[str] | None = None) -> int:
     raw = list(sys.argv[1:] if argv is None else argv)
     # Before parse so -h / --version / usage errors are already tinted
     term.init(color=_peek_color(raw))
+    try:
+        instance_n, raw = _peel_instance_number(raw)
+    except SystemExit as e:
+        msg = e.args[0] if e.args else str(e)
+        if isinstance(msg, str) and msg and not str(msg).isdigit():
+            print(term.red(msg), file=sys.stderr)
+            return 2
+        code = e.code
+        return int(code) if isinstance(code, int) else (0 if code is None else 1)
+
     parser = build_parser()
     try:
         args = parser.parse_args(raw)
@@ -494,9 +565,8 @@ def main(argv: list[str] | None = None) -> int:
         return int(code) if isinstance(code, int) else (0 if code is None else 1)
 
     term.init(color=getattr(args, "color", "auto"))
-    if not getattr(args, "cmd", None):
-        parser.print_help()
-        return 0
+    if instance_n is not None:
+        args.instance = instance_n
     try:
         return int(args.func(args) or 0)
     except KeyboardInterrupt:
@@ -504,6 +574,9 @@ def main(argv: list[str] | None = None) -> int:
         return 130
     except SystemExit as e:
         code = e.code
+        if isinstance(code, str):
+            print(term.red(code), file=sys.stderr)
+            return 1
         return int(code) if isinstance(code, int) else (0 if code is None else 1)
     except Exception as e:
         print(term.red(f"ERROR: {e}"), file=sys.stderr)

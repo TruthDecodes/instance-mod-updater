@@ -2,7 +2,12 @@
 
 ## Unreleased
 
-- README Install is unzip and run only. Dropped embed/LICENSE/No Python packaging narration for Release users.
+## 0.1.8 - 2026-09-02
+
+- Default command is a full update: `.\run.cmd` (optional instance number, e.g. `.\run.cmd 1`)
+- Instance pick is by number only (same order as `list`). Prompt when several are installed: number, or Enter for every instance
+- Removed the `all` command and `-i` / name matching
+- README Install / Update lead with bare `.\run.cmd`
 
 ## 0.1.7 - 2026-09-02
 

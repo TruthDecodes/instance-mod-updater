@@ -128,42 +128,71 @@ def list_instances(ftba_root: Path | None = None) -> list[Instance]:
     return out
 
 
-def resolve_instance(
-    name_or_path: str | None,
-    ftba_root: Path | None = None,
-) -> Instance:
+def instance_at(index: int, ftba_root: Path | None = None) -> Instance:
+    """Return the 1-based instance from list_instances order."""
     root = ftba_root or default_ftba_root()
-    if name_or_path:
-        p = Path(name_or_path)
-        if p.is_dir() and (p / "instance.json").is_file():
-            return load_instance(p)
-        # match by folder name (case-insensitive substring)
-        needle = name_or_path.lower().strip()
-        matches = []
-        for inst in list_instances(root):
-            if needle == inst.path.name.lower() or needle == inst.name.lower():
-                return inst
-            if needle in inst.path.name.lower() or needle in inst.name.lower():
-                matches.append(inst)
-        if len(matches) == 1:
-            return matches[0]
-        if len(matches) > 1:
-            names = ", ".join(m.path.name for m in matches)
-            raise SystemExit(f"Ambiguous instance '{name_or_path}': {names}")
-        raise SystemExit(f"Instance not found: {name_or_path} under {root / 'instances'}")
-    # default: single instance, or prefer Unstable 6
-    all_inst = list_instances(root)
-    if not all_inst:
+    insts = list_instances(root)
+    if not insts:
         raise SystemExit(f"No FTB instances under {root / 'instances'}")
-    for inst in all_inst:
-        if re.search(r"unstable\s*6", inst.path.name, re.I) or re.search(
-            r"unstable\s*6", inst.name, re.I
-        ):
-            return inst
-    if len(all_inst) == 1:
-        return all_inst[0]
-    names = "\n".join(f"  - {i.path.name} ({i.name})" for i in all_inst)
-    raise SystemExit(f"Multiple instances; pass --instance:\n{names}")
+    if index < 1 or index > len(insts):
+        raise SystemExit(f"Instance {index} is out of range (1-{len(insts)})")
+    return insts[index - 1]
+
+
+def format_instance_choice(index: int, inst: Instance) -> str:
+    """One line for prompts and list: '1  folder  (display)'."""
+    label = inst.path.name
+    if inst.name and inst.name != inst.path.name:
+        return f"{index}  {label}  ({inst.name})"
+    return f"{index}  {label}"
+
+
+def select_instances(
+    index: int | None,
+    ftba_root: Path | None = None,
+    *,
+    allow_all: bool = True,
+    input_fn=input,
+) -> list[Instance]:
+    """
+    Pick instances by 1-based number.
+
+    - index set → that instance only
+    - one installed → that instance (no prompt)
+    - several + index None → prompt: number, or Enter for every instance when allow_all
+    """
+    root = ftba_root or default_ftba_root()
+    insts = list_instances(root)
+    if not insts:
+        raise SystemExit(f"No FTB instances under {root / 'instances'}")
+    if index is not None:
+        return [instance_at(index, root)]
+    if len(insts) == 1:
+        return [insts[0]]
+
+    print("Instances:")
+    for i, inst in enumerate(insts, start=1):
+        print(f"  {format_instance_choice(i, inst)}")
+    if allow_all:
+        prompt = f"Number (1-{len(insts)}, Enter = every instance): "
+    else:
+        prompt = f"Number (1-{len(insts)}): "
+    while True:
+        raw = input_fn(prompt)
+        text = (raw or "").strip()
+        if not text:
+            if allow_all:
+                return list(insts)
+            print(f"Enter a number from 1 to {len(insts)}.")
+            continue
+        if not text.isdigit():
+            print(f"Enter a number from 1 to {len(insts)}.")
+            continue
+        n = int(text)
+        if n < 1 or n > len(insts):
+            print(f"Enter a number from 1 to {len(insts)}.")
+            continue
+        return [insts[n - 1]]
 
 
 def save_instance_json(inst: Instance) -> None:

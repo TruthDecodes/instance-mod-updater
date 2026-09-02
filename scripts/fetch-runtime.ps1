@@ -48,4 +48,4 @@ if (-not $Pth) { throw "python*._pth missing under $Dest" }
 $Py = Join-Path $Dest 'python.exe'
 & $Py --version
 Write-Host "OK runtime at $Dest"
-Write-Host "Run: .\run.cmd list"
+Write-Host "Run: .\run.cmd"

@@ -1,6 +1,6 @@
 # Mod updater for FTB App instances
 
-**Unfinished.** Version 0.1.7. No support.
+**Unfinished.** Version 0.1.8. No support.
 Not an official Feed the Beast product.
 
 Updates **mods on an existing FTB App instance**.
@@ -15,7 +15,7 @@ License: [MIT](LICENSE). Copyright 2026 Truth. Security: [SECURITY.md](SECURITY.
 3. Run:
 
 ```text
-.\run.cmd list
+.\run.cmd
 ```
 
 ## Update mods
@@ -23,13 +23,22 @@ License: [MIT](LICENSE). Copyright 2026 Truth. Security: [SECURITY.md](SECURITY.
 Close Minecraft. Open a command prompt in the folder where you put `run.cmd`.
 
 ```text
-.\run.cmd list
-.\run.cmd all -i "name from list"
+.\run.cmd
 ```
 
-That is the normal path. `run.cmd` refreshes this tool from a signed GitHub Release,
-then checks mods, applies updates, and upgrades NeoForge if the mods need it.
-Pack ids come from the instance when FTB already stored them.
+That checks mods, downloads updates, applies them, and upgrades NeoForge if the
+mods need it. `run.cmd` also refreshes this tool from a signed GitHub Release
+first. Pack ids come from the instance when FTB already stored them.
+
+If more than one FTB instance is installed, you get a numbered list. Type a
+number for one instance, or press Enter for every instance. With only one
+instance, it runs with no prompt.
+
+Optional: skip the prompt and pick by number (same order as below):
+
+```text
+.\run.cmd 1
+```
 
 If FTB App offers to reinstall the pack loader afterward, decline.
 
@@ -42,25 +51,28 @@ If FTB App offers to reinstall the pack loader afterward, decline.
   pack’s pinned loader, **decline**. On failure, check
   `%LOCALAPPDATA%\.ftba\instances\<name>\logs\latest.log`.
 
-## Commands
+## Details
+
+Default work root: the same folder as `run.cmd` (jars, manifests, backups, reports, logs).
+Override with `--work-root` if you want those files elsewhere. When more than one
+instance is updated in one run, each gets a subfolder under the work root.
 
 | Command | What it does |
 | --- | --- |
-| `list` | List FTB instances |
-| `all -i "name"` | Check, download, apply, and upgrade NeoForge if needed |
-| `check -i "name"` | Stage updates and write reports (no apply) |
+| *(no command)* | Check, download, apply, and upgrade NeoForge if needed |
+| `1` | Same as above for instance number 1 |
+| `list` | Show instances with their numbers |
+| `check` / `check 1` | Stage updates and write reports (no apply) |
 | `apply` | Copy staged jars into the instance `mods\` folder |
-| `upgrade-loader` | NeoForge client install into `.ftba\bin`, retarget `instance.json` |
+| `upgrade-loader` / `upgrade-loader 1` | NeoForge client install into `.ftba\bin`, retarget `instance.json` |
 | `self-update` | Refresh app code only (same as `deploy.cmd`) |
-
-Default work root: the same folder as `run.cmd` (jars, manifests, backups, reports, logs).
-Override with `--work-root` if you want those files elsewhere.
 
 Useful extras:
 
 ```text
-.\run.cmd all -i "name" --dry-run
-.\run.cmd check -i "name"
+.\run.cmd --dry-run
+.\run.cmd 1 --dry-run
+.\run.cmd check 1
 notepad .\report-latest.md
 .\run.cmd apply
 ```
@@ -68,10 +80,10 @@ notepad .\report-latest.md
 If `instance.json` does not already store pack/version ids:
 
 ```text
-.\run.cmd all -i "ftb unstable 6" --pack-id 132 --version-id 100392
+.\run.cmd 1 --pack-id 132 --version-id 100392
 ```
 
-Skip self-update for one launch: `.\run.cmd --no-self-update list`
+Skip self-update for one launch: `.\run.cmd --no-self-update`
 (or set `INSTANCE_UPDATER_NO_SELF_UPDATE=1`).
 
 ## Pack metadata (FTB)
@@ -149,7 +161,7 @@ development only:
 git clone https://github.com/TruthDecodes/instance-mod-updater.git
 cd instance-mod-updater
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\fetch-runtime.ps1
-.\run.cmd list
+.\run.cmd
 ```
 
 `run.ps1` exists for the same commands if you want PowerShell. Prefer `run.cmd`

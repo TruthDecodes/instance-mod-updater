@@ -7,14 +7,15 @@
 
 .NOTES
   If you see "running scripts is disabled", either:
-    .\run.cmd list
+    .\run.cmd
   or:
-    powershell -NoProfile -ExecutionPolicy Bypass -File .\run.ps1 list
+    powershell -NoProfile -ExecutionPolicy Bypass -File .\run.ps1
   Prefer run.cmd so you do not need to touch ExecutionPolicy permanently.
 
 .EXAMPLE
-  .\run.cmd list
-  powershell -NoProfile -ExecutionPolicy Bypass -File .\run.ps1 check -i "ftb unstable 6" --pack-id 132 --version-id 100392
+  .\run.cmd
+  .\run.cmd 1
+  powershell -NoProfile -ExecutionPolicy Bypass -File .\run.ps1 check 1 --pack-id 132 --version-id 100392
 #>
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
