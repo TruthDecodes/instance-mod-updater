@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.1.7 - 2026-09-02
+
+- Signed Release zip includes the pinned Windows embeddable Python under `runtime\python\` (with `LICENSE.txt`)
+- Zip members are flat (unpack into an empty folder; no versioned inner folder to unpack twice)
+- Self-update installs or refreshes `runtime\` from the signed zip
+- README install is unzip and run; `fetch-runtime.ps1` remains for git checkouts
+
 ## 0.1.6 - 2026-09-01
 
 - CurseForge Core `/v1/` calls always use `https://truthimu.duckdns.org`. Local unique-key inject is gone from the published app.

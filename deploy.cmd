@@ -4,7 +4,7 @@ cd /d "%~dp0"
 
 REM Update instance-mod-updater app code from a signed GitHub Release.
 REM This tool updates mods on an existing FTB App instance. Not an official Feed the Beast product.
-REM Leaves runtime, staged jars, reports, manifests, backups, and extra local files alone.
+REM Refreshes app code and bundled runtime. Leaves staged jars, reports, manifests, backups, and extras alone.
 REM Usage (from the folder that contains this file):
 REM   deploy.cmd
 REM   deploy.cmd --check-only

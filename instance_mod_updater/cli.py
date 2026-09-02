@@ -471,7 +471,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     ps = sub.add_parser(
         "self-update",
-        help="Refresh app code from GitHub; leave runtime and work files alone",
+        help="Refresh app code and bundled runtime from GitHub; leave work files alone",
     )
     ps.add_argument("--root", type=Path, default=None, help="Install folder (default: this checkout)")
     ps.add_argument("--ref", default=None, help="Signed release tag (default: latest newer signed release)")
