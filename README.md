@@ -1,6 +1,6 @@
 # Mod updater for FTB App instances
 
-**Unfinished.** Version 0.1.5. Personal snapshot, not a release. No support.
+**Unfinished.** Version 0.1.6. Personal snapshot, not a release. No support.
 Do not treat it as ready for anyone else. Not an official Feed the Beast product.
 
 Update **mods on an existing FTB App instance** (your real modlist stays where it is).
@@ -39,7 +39,7 @@ Use `run.cmd`. It refreshes this tool from a signed GitHub Release, then checks 
 If FTB App offers to reinstall the pack loader, decline.
 
 Dry run, report-then-apply, or explicit pack ids: [Step by step](#step-by-step) · [Pack metadata](#pack-metadata-ftb).
-CurseForge file lists, download URLs, and fingerprints work for the published Release.
+CurseForge file lists, download URLs, and fingerprints work for the published Release without a local unique key.
 
 ### Safety
 
@@ -161,7 +161,7 @@ Dry run (no apply / no loader write):
 
 Matching order for a jar: exact pack SHA1 → exact pack filename → same **modid** as a pack mod → same **jar product stem** (name with loader/version stripped). That last path is how an instance that already moved past the pack pin still finds the pack row.
 
-Those mods list on CurseForge through the same Core path as other CF jars (publisher origin, or your own approved key if you set one).
+Those mods list on CurseForge through the same Core path as other CF jars (publisher origin; no local unique key).
 
 | Pack | pack-id | version-id (example) |
 | --- | --- | --- |
