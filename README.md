@@ -11,8 +11,9 @@ License: [MIT](LICENSE). Copyright 2026 Truth. Security: [SECURITY.md](SECURITY.
 
 1. Download `instance-mod-updater-x.y.z.zip` from [Releases](https://github.com/TruthDecodes/instance-mod-updater/releases/latest).
    Not the green **Code** zip (`main` is unsigned).
-2. Create an empty folder anywhere you want and unpack the zip **into that folder**
-   (`run.cmd` should sit directly in it).
+2. Create an empty folder anywhere you want and unpack the zip into that folder.
+   The Release zip is flat: `run.cmd` is at that folder’s root (not inside a
+   versioned subfolder).
 3. Run:
 
 ```text
