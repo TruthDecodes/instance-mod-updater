@@ -64,8 +64,8 @@ Or install python.org 3.11+ (Add to PATH). Disable Store app execution aliases f
 
 # Refresh app code first, then re-invoke so a rewritten run.ps1 is used.
 # Work files / runtime are not touched. Skip: --no-self-update or INSTANCE_UPDATER_NO_SELF_UPDATE=1
-# (FTB_NO_SELF_UPDATE=1 still works). Guard: INSTANCE_UPDATER_SELF_UPDATED (FTB_SELF_UPDATED still works).
-$skipUpdate = ($env:INSTANCE_UPDATER_NO_SELF_UPDATE -eq '1') -or ($env:FTB_NO_SELF_UPDATE -eq '1') -or ($env:INSTANCE_UPDATER_SELF_UPDATED -eq '1') -or ($env:FTB_SELF_UPDATED -eq '1') -or ($args -contains '--no-self-update') -or ($args.Count -ge 1 -and $args[0] -eq 'self-update')
+# Guard: INSTANCE_UPDATER_SELF_UPDATED.
+$skipUpdate = ($env:INSTANCE_UPDATER_NO_SELF_UPDATE -eq '1') -or ($env:INSTANCE_UPDATER_SELF_UPDATED -eq '1') -or ($args -contains '--no-self-update') -or ($args.Count -ge 1 -and $args[0] -eq 'self-update')
 $selfUpdatePy = Join-Path $Root 'instance_mod_updater\self_update.py'
 if (-not $skipUpdate -and (Test-Path -LiteralPath $selfUpdatePy)) {
   $env:PYTHONPATH = $Root

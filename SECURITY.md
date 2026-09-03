@@ -33,11 +33,7 @@ The private key is not in this repository and is not used by GitHub Actions.
 A push to `main` is not enough to land code on installed copies.
 
 Skip a launch with `--no-self-update` or
-`INSTANCE_UPDATER_NO_SELF_UPDATE=1` (`FTB_NO_SELF_UPDATE` is still honored as an alias).
-
-## Secrets
-
-Do not put API keys in this repository.
+`INSTANCE_UPDATER_NO_SELF_UPDATE=1`.
 
 ## Service access
 
