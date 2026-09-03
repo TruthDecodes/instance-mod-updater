@@ -36,8 +36,9 @@ UPDATE_PUBLIC_KEY_HEX = "62c19f10d492f7ee697f3d0f541446ddb8a75b310ae19fc2afdc7e4
 
 _ZIP_NAME_RE = re.compile(r"^instance-mod-updater-(\d+\.\d+\.\d+)\.zip$")
 
-# Tracked app files only. Anything else in the install folder is left alone
-# (runtime, staged jars, reports, manifests, backups, extra local files).
+# Tracked app files only for git/worktree copy. Signed-zip extract also writes
+# runtime\ (bundled embed). Other install-folder extras stay put (jars, reports,
+# manifests, backups, local/).
 ALLOW_FILES = frozenset(
     {
         "run.cmd",
@@ -99,6 +100,21 @@ def is_allowed_rel(rel: str) -> bool:
     return norm in ALLOW_FILES
 
 
+def is_runtime_rel(rel: str) -> bool:
+    """True for bundled embed paths (Release zip + self-update only; not git copy)."""
+    norm = rel.replace("\\", "/").lstrip("./")
+    if not norm or norm.endswith("/"):
+        return False
+    parts = [p for p in norm.split("/") if p and p != "."]
+    if not parts or parts[0] != "runtime":
+        return False
+    if any(p == ".." for p in parts):
+        return False
+    if any(parts[-1].endswith(suf) for suf in SKIP_SUFFIXES):
+        return False
+    return True
+
+
 def _zip_member_rel(name: str) -> str | None:
     """Relative path inside a release zip, or None if the member is unsafe."""
     norm = name.replace("\\", "/").lstrip("/")
@@ -135,14 +151,14 @@ def copy_code_tree(src_root: Path, dest_root: Path) -> list[str]:
 
 
 def extract_allowlisted_zip(zf: zipfile.ZipFile, dest_root: Path) -> list[str]:
-    """Copy allowlisted zip members under dest. Never extractall."""
+    """Copy app code and bundled runtime\\ from a signed zip. Never extractall."""
     dest_root = dest_root.resolve()
     copied: list[str] = []
     for info in zf.infolist():
         if info.is_dir():
             continue
         rel = _zip_member_rel(info.filename)
-        if rel is None or not is_allowed_rel(rel):
+        if rel is None or not (is_allowed_rel(rel) or is_runtime_rel(rel)):
             continue
         dest = (dest_root / rel).resolve()
         try:
@@ -306,8 +322,8 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="instance-mod-updater self-update",
         description=(
-            "Refresh app code from a signed GitHub Release. Does not touch runtime, "
-            "staged jars, reports, manifests, backups, or other local files. "
+            "Refresh app code and bundled runtime from a signed GitHub Release. "
+            "Does not touch staged jars, reports, manifests, backups, or other local files. "
             "Unsigned default-branch zips are not used."
         ),
     )

@@ -2,13 +2,30 @@
 
 ## Unreleased
 
-- CurseForge Core `/v1/` calls always use `https://truthimu.duckdns.org`. Local unique-key inject (`CURSEFORGE_API_KEY` / `CF_API_KEY` / `--cf-api-key`) is gone.
-- SECURITY.md keeps a short secrets line and the service-access paragraph. No unique-key or enroll process writeup in the public tree.
+## 0.1.8 - 2026-09-02
+
+- Default command is a full update: `.\run.cmd` (optional instance number, e.g. `.\run.cmd 1`)
+- Instance pick is by number only (same order as `list`). Prompt when several are installed: number, or Enter for every instance
+- Removed the `all` command and `-i` / name matching
+- README Install / Update lead with bare `.\run.cmd`
+
+## 0.1.7 - 2026-09-02
+
+- Signed Release zip includes the pinned Windows embeddable Python under `runtime\python\` (with `LICENSE.txt`)
+- Zip members are flat (unpack into an empty folder; no versioned inner folder to unpack twice)
+- Self-update installs or refreshes `runtime\` from the signed zip
+- README install is unzip and run; `fetch-runtime.ps1` remains for git checkouts
+
+## 0.1.6 - 2026-09-01
+
+- CurseForge Core `/v1/` calls always use `https://truthimu.duckdns.org`. Local unique-key inject is gone from the published app.
+- Machine-local publisher token: first use enrolls; Core calls send Authorization and still never send `x-api-key`.
+- Per-release enroll mark is filled only in the signed zip (empty in git).
+- README states CurseForge works for the published Release without a local unique key. SECURITY.md keeps a short secrets line and the service-access paragraph.
 
 ## 0.1.5 - 2026-08-27
 
 - With no local unique CurseForge key, file list, download URL, and fingerprint still use Core `/v1/` paths via `https://truthimu.duckdns.org`. Those calls do not send `x-api-key`.
-- A local `CURSEFORGE_API_KEY` / `CF_API_KEY` still talks to `api.curseforge.com`.
 - README Start here for zip install. CurseForge is no longer described as uncheckable without a local unique key.
 
 ## 0.1.4 - 2026-08-14

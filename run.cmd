@@ -47,7 +47,7 @@ REM Interactive console: prefer colored Python output (tool still respects NO_CO
 if not defined NO_COLOR if not defined FORCE_COLOR set "FORCE_COLOR=1"
 
 REM Refresh app code first, then re-invoke this file so a new run.cmd is used.
-REM Work files / runtime are not touched. Skip: --no-self-update or INSTANCE_UPDATER_NO_SELF_UPDATE=1
+REM Work files are not touched; runtime may refresh from the signed zip. Skip: --no-self-update or INSTANCE_UPDATER_NO_SELF_UPDATE=1
 REM (FTB_NO_SELF_UPDATE=1 still works). In-process guard: INSTANCE_UPDATER_SELF_UPDATED (FTB_SELF_UPDATED still works).
 if /I "%INSTANCE_UPDATER_NO_SELF_UPDATE%"=="1" goto :run
 if /I "%FTB_NO_SELF_UPDATE%"=="1" goto :run

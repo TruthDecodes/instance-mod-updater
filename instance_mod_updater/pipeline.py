@@ -72,8 +72,8 @@ def _layman_for_codes(codes: list[str], *, pack_matched: bool) -> str:
     cset = set(codes)
     if "cf_no_key" in cset:
         return (
-            "Pack row has a CurseForge project, but no Core API key, so the official "
-            "file list was not fetched. Latest not checked"
+            "Pack row has a CurseForge project, but the official file list was not "
+            "available. Latest not checked"
         )
     if "ftb_private_blob" in cset or "pack_ftb_only" in cset:
         if "pack_pin_match" in cset or pack_matched:
@@ -92,8 +92,8 @@ def _layman_for_codes(codes: list[str], *, pack_matched: bool) -> str:
         )
     if "mr_project_not_found" in cset and "fingerprint_no_key" in cset:
         return (
-            "No Modrinth project for this mod id/stem; CurseForge fingerprint skipped "
-            "(no API key). Latest not checked"
+            "No Modrinth project for this mod id/stem; CurseForge fingerprint was not "
+            "available. Latest not checked"
         )
     if "mr_project_not_found" in cset and "fingerprint_miss" in cset:
         return (
@@ -280,9 +280,7 @@ def error_layman(row: dict[str, Any]) -> str:
             f"Found an update listing for {jar}, but it had no downloadable jar."
         )
     if err == "cf_no_key":
-        return (
-            f"A CurseForge API key is required to download the update for {jar}."
-        )
+        return f"Could not download the CurseForge update for {jar}."
     if err == "cf_no_download_url":
         return f"CurseForge did not give a download link for {jar}."
     extra = str(err)
@@ -1467,9 +1465,8 @@ def check_updates(
         "pack_neoforge": result.pack_neoforge,
         "policy": (
             "Prefer release for this MC+loader. Beta/alpha only when that is the only channel. "
-            "CurseForge uses the official Core API (file list, download URL, fingerprint). "
-            "A local unique application key talks to api.curseforge.com; otherwise the "
-            "published app uses the publisher origin. Project ids may come from "
+            "CurseForge uses the official Core API (file list, download URL, fingerprint) "
+            "via the publisher origin. Project ids may come from "
             "the FTB pack JSON or a fingerprint hit. current = checked Modrinth/CurseForge "
             "and already on the newest eligible build. pack_only / uncheckable = latest was "
             "not checked: cascade was exact Modrinth GET by modid/stem, then CF "

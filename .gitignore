@@ -1,4 +1,4 @@
-# Bundled embeddable CPython (download via scripts/fetch-runtime.ps1)
+# Embeddable CPython (Release zip stages it; git checkouts use fetch-runtime.ps1)
 /runtime/
 
 # Last zip self-update commit (not used when this folder is a git clone)

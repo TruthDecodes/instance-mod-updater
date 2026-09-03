@@ -5,8 +5,8 @@
   This tool updates mods on an existing FTB App instance. Not an official Feed the Beast product.
 
   Delegates to the Python verifier. Unsigned default-branch zips are not used.
-  Copies only launchers, scripts, and the Python package.
-  Does not touch runtime\, staged jars, reports, manifests, backups,
+  Copies launchers, scripts, the Python package, and bundled runtime\.
+  Does not touch staged jars, reports, manifests, backups,
   pack caches, or any extra files you added.
 #>
 [CmdletBinding()]
