@@ -48,11 +48,9 @@ if not defined NO_COLOR if not defined FORCE_COLOR set "FORCE_COLOR=1"
 
 REM Refresh app code first, then re-invoke this file so a new run.cmd is used.
 REM Work files are not touched; runtime may refresh from the signed zip. Skip: --no-self-update or INSTANCE_UPDATER_NO_SELF_UPDATE=1
-REM (FTB_NO_SELF_UPDATE=1 still works). In-process guard: INSTANCE_UPDATER_SELF_UPDATED (FTB_SELF_UPDATED still works).
+REM In-process guard: INSTANCE_UPDATER_SELF_UPDATED.
 if /I "%INSTANCE_UPDATER_NO_SELF_UPDATE%"=="1" goto :run
-if /I "%FTB_NO_SELF_UPDATE%"=="1" goto :run
 if defined INSTANCE_UPDATER_SELF_UPDATED goto :run
-if defined FTB_SELF_UPDATED goto :run
 if /I "%~1"=="self-update" goto :run
 echo %*| findstr /I /C:"--no-self-update" >nul && goto :run
 if exist "%ROOT%instance_mod_updater\self_update.py" (
