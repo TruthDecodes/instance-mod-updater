@@ -1,4 +1,4 @@
-# Mod updater for FTB App instances
+# Mod updater for Minecraft FTB App instances
 
 **Unfinished.** Version 0.1.8. No support.
 Not an official Feed the Beast product.
