@@ -12,6 +12,7 @@ from instance_mod_updater.self_update import (
     copy_code_tree,
     extract_allowlisted_zip,
     is_allowed_rel,
+    is_runtime_rel,
     verify_release_zip,
 )
 
@@ -25,6 +26,7 @@ class AllowedRelTests(unittest.TestCase):
         self.assertTrue(is_allowed_rel("tests/test_self_update.py"))
 
     def test_work_and_runtime_stay_put(self):
+        # Git/worktree copy must not treat runtime as ordinary app code.
         self.assertFalse(is_allowed_rel("runtime/python/python.exe"))
         self.assertFalse(is_allowed_rel("manifest.json"))
         self.assertFalse(is_allowed_rel("report-latest.md"))
@@ -43,6 +45,12 @@ class AllowedRelTests(unittest.TestCase):
         self.assertIn("CONTRIBUTING.md", ALLOW_FILES)
         self.assertIn("instance_mod_updater", ALLOW_DIRS)
         self.assertIn("scripts", ALLOW_DIRS)
+
+    def test_runtime_rel_for_signed_zip(self):
+        self.assertTrue(is_runtime_rel("runtime/python/python.exe"))
+        self.assertTrue(is_runtime_rel("runtime/python/LICENSE.txt"))
+        self.assertFalse(is_runtime_rel("runtime/../escape.exe"))
+        self.assertFalse(is_runtime_rel("instance_mod_updater/cli.py"))
 
 
 class CopyCodeTreeTests(unittest.TestCase):
@@ -98,6 +106,24 @@ class ExtractAllowlistedZipTests(unittest.TestCase):
                 copied = extract_allowlisted_zip(zf, dest)
             self.assertIn("run.cmd", copied)
             self.assertTrue((dest / "run.cmd").is_file())
+
+    def test_flat_zip_extracts_runtime(self):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("run.cmd", "ok\n")
+            zf.writestr("runtime/python/python.exe", b"py")
+            zf.writestr("runtime/python/LICENSE.txt", "PSF\n")
+            zf.writestr("manifest.json", "nope\n")
+        buf.seek(0)
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp)
+            with zipfile.ZipFile(buf) as zf:
+                copied = extract_allowlisted_zip(zf, dest)
+            self.assertIn("run.cmd", copied)
+            self.assertIn("runtime/python/python.exe", copied)
+            self.assertIn("runtime/python/LICENSE.txt", copied)
+            self.assertTrue((dest / "runtime" / "python" / "LICENSE.txt").is_file())
+            self.assertFalse((dest / "manifest.json").exists())
             self.assertFalse((dest / "local" / "overlay.py").exists())
             self.assertFalse((dest / "escape.cmd").exists())
             self.assertFalse((dest / "jars" / "evil.jar").exists())

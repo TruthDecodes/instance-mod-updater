@@ -1,7 +1,7 @@
 # Security
 
-This repository is an unfinished personal snapshot. It is not a release and is
-not offered for general use.
+This repository is unfinished and unsupported.
+Not an official Feed the Beast product.
 
 ## Report a vulnerability
 

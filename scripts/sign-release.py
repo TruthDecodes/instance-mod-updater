@@ -16,15 +16,19 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+SCRIPTS = Path(__file__).resolve().parent
+for p in (ROOT, SCRIPTS):
+    if str(p) not in sys.path:
+        sys.path.insert(0, str(p))
 
+from embed_runtime import stage_embed_runtime  # noqa: E402
 from instance_mod_updater import __version__  # noqa: E402
 from instance_mod_updater import _ed25519  # noqa: E402
 from instance_mod_updater.self_update import (  # noqa: E402
     UPDATE_PUBLIC_KEY_HEX,
     copy_code_tree,
     is_allowed_rel,
+    is_runtime_rel,
 )
 
 
@@ -61,18 +65,20 @@ def write_release_mark(path: Path, mark: str | None = None) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
-def _write_zip(src: Path, dest: Path, version: str) -> None:
-    prefix = f"instance-mod-updater-{version}"
+def _write_zip(src: Path, dest: Path) -> None:
+    """Write a flat zip (members at archive root). Includes app code + runtime\\."""
     with zipfile.ZipFile(dest, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for dirpath, dirnames, filenames in os.walk(src):
-            dirnames[:] = [d for d in dirnames if d not in {".git", "__pycache__", "runtime", ".serena", "local"}]
+            dirnames[:] = [
+                d for d in dirnames if d not in {".git", "__pycache__", ".serena", "local"}
+            ]
             base = Path(dirpath)
             for name in filenames:
                 path = base / name
                 rel = path.relative_to(src).as_posix()
-                if not is_allowed_rel(rel):
+                if not (is_allowed_rel(rel) or is_runtime_rel(rel)):
                     continue
-                zf.write(path, f"{prefix}/{rel}")
+                zf.write(path, rel)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -120,9 +126,11 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("no allowlisted files to pack")
     mark_path = staging / "instance_mod_updater" / "_release_mark.py"
     digest = write_release_mark(mark_path)
+    # Official Windows embed (includes LICENSE.txt). Not in git; staged only for the zip.
+    stage_embed_runtime(staging / "runtime" / "python")
 
     zip_path = out_dir / f"instance-mod-updater-{args.version}.zip"
-    _write_zip(staging, zip_path, args.version)
+    _write_zip(staging, zip_path)
     blob = zip_path.read_bytes()
     sig = _ed25519.sign(seed, blob)
     sig_path = Path(str(zip_path) + ".sig")

@@ -3,18 +3,19 @@
 .SYNOPSIS
   Launch instance-mod-updater on this PC (run as the Windows user that owns the FTB App instance).
   This tool updates mods on an existing FTB App instance. Not an official Feed the Beast product.
-  If you still have %PUBLIC%\ftb-instance-updater, move/copy the tree to %PUBLIC%\instance-mod-updater so work jars stay with the new name.
+  If you still have an older ftb-instance-updater folder, rename or copy that tree to instance-mod-updater so staged jars stay with the app.
 
 .NOTES
   If you see "running scripts is disabled", either:
-    .\run.cmd list
+    .\run.cmd
   or:
-    powershell -NoProfile -ExecutionPolicy Bypass -File .\run.ps1 list
+    powershell -NoProfile -ExecutionPolicy Bypass -File .\run.ps1
   Prefer run.cmd so you do not need to touch ExecutionPolicy permanently.
 
 .EXAMPLE
-  .\run.cmd list
-  powershell -NoProfile -ExecutionPolicy Bypass -File .\run.ps1 check -i "ftb unstable 6" --pack-id 132 --version-id 100392
+  .\run.cmd
+  .\run.cmd 1
+  powershell -NoProfile -ExecutionPolicy Bypass -File .\run.ps1 check 1 --pack-id 132 --version-id 100392
 #>
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path

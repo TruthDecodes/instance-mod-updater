@@ -10,6 +10,7 @@
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $Dest = Join-Path $Root 'runtime\python'
+# Pins must match scripts/embed_runtime.py (Release zip staging).
 $Ver = '3.12.10'
 $ZipName = "python-$Ver-embed-amd64.zip"
 $Url = "https://www.python.org/ftp/python/$Ver/$ZipName"
@@ -47,4 +48,4 @@ if (-not $Pth) { throw "python*._pth missing under $Dest" }
 $Py = Join-Path $Dest 'python.exe'
 & $Py --version
 Write-Host "OK runtime at $Dest"
-Write-Host "Run: .\run.cmd list"
+Write-Host "Run: .\run.cmd"
